@@ -1,4 +1,4 @@
-import { PluginManifest, PluginPermission } from './types';
+import { PluginManifest, PluginPermission, Screenshot } from './types';
 import validatePluginId from './validatePluginId';
 
 export default function manifestFromObject(o: any): PluginManifest {
@@ -31,6 +31,11 @@ export default function manifestFromObject(o: any): PluginManifest {
 		return o[name];
 	};
 
+	const getScreenshots = (defaultValue: Screenshot[] = []): Screenshot[] => {
+		if (!o.screenshots) return defaultValue;
+		return o.screenshots;
+	};
+
 	const permissions: PluginPermission[] = [];
 
 	const manifest: PluginManifest = {
@@ -45,9 +50,12 @@ export default function manifestFromObject(o: any): PluginManifest {
 		homepage_url: getString('homepage_url', false),
 		repository_url: getString('repository_url', false),
 		keywords: getStrings('keywords', false),
+		categories: getStrings('categories', false),
+		screenshots: getScreenshots(),
 		permissions: permissions,
 
 		_recommended: getBoolean('_recommended', false, false),
+		_built_in: getBoolean('_built_in', false, false),
 	};
 
 	validatePluginId(manifest.id);

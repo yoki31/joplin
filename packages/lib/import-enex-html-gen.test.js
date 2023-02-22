@@ -58,15 +58,18 @@ const compareOutputToExpected = (options) => {
 	}));
 };
 
-describe('EnexToHtml', function() {
-	beforeEach(async (done) => {
+describe('EnexToHtml', () => {
+	beforeEach(async () => {
 		await setupDatabaseAndSynchronizer(1);
 		await switchClient(1);
-		done();
 	});
 
 	compareOutputToExpected({
-		testName: 'checklist-list',
+		testName: 'checkbox-list',
+	});
+
+	compareOutputToExpected({
+		testName: 'checklist',
 	});
 
 	compareOutputToExpected({

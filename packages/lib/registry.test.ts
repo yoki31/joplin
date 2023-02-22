@@ -5,7 +5,7 @@ const sync = {
 	start: jest.fn().mockReturnValue({}),
 };
 
-describe('Registry', function() {
+describe('Registry', () => {
 	let originalSyncTarget: typeof reg.syncTarget;
 
 	beforeAll(() => {
@@ -49,6 +49,7 @@ describe('Registry', function() {
 
 		it('should sync if do wifi check is false', done => {
 			void reg.scheduleSync(1, null, false)
+			// eslint-disable-next-line promise/prefer-await-to-then -- Old code before rule was applied
 				.then(() =>{
 					expect(sync.start).toHaveBeenCalled();
 					done();

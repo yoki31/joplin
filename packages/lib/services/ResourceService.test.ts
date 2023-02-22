@@ -9,13 +9,12 @@ import Resource from '../models/Resource';
 import SearchEngine from '../services/searchengine/SearchEngine';
 import { loadMasterKeysFromSettings, setupAndEnableEncryption } from './e2ee/utils';
 
-describe('services/ResourceService', function() {
+describe('services/ResourceService', () => {
 
-	beforeEach(async (done) => {
+	beforeEach(async () => {
 		await setupDatabaseAndSynchronizer(1);
 		await setupDatabaseAndSynchronizer(2);
 		await switchClient(1);
-		done();
 	});
 
 	it('should delete orphaned resources', (async () => {

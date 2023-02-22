@@ -41,7 +41,7 @@ const calculateScore = (searchString, notes) => {
 	};
 
 	let titleBM25WeightedByLastUpdate = new Array(notes.length).fill(-1);
-	if (avgTokens != 0) {
+	if (avgTokens !== 0) {
 		for (let i = 0; i < notes.length; i++) {
 			titleBM25WeightedByLastUpdate[i] = IDF(notes.length, notesWithWord) * ((freqTitle[i] * (K1 + 1)) / (freqTitle[i] + K1 * (1 - B + B * (numTokens[i] / avgTokens))));
 			titleBM25WeightedByLastUpdate[i] += weightForDaysSinceLastUpdate(notes[i]);
@@ -57,16 +57,14 @@ const calculateScore = (searchString, notes) => {
 	return scores;
 };
 
-describe('services_SearchEngine', function() {
+describe('services_SearchEngine', () => {
 
-	beforeEach(async (done) => {
+	beforeEach(async () => {
 		await setupDatabaseAndSynchronizer(1);
 		await switchClient(1);
 
 		engine = new SearchEngine();
 		engine.setDb(db());
-
-		done();
 	});
 
 	it('should keep the content and FTS table in sync', (async () => {

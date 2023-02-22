@@ -16,6 +16,7 @@ export interface UserItemDeleteOptions extends DeleteOptions {
 	byUserItem?: UserItem;
 	byUserItemIds?: number[];
 	byShare?: DeleteByShare;
+	recordChanges?: boolean;
 }
 
 export default class UserItemModel extends BaseModel<UserItem> {
@@ -81,14 +82,14 @@ export default class UserItemModel extends BaseModel<UserItem> {
 			.where('user_items.user_id', '=', userId);
 	}
 
-	public async deleteByUserItem(userId: Uuid, itemId: Uuid): Promise<void> {
+	public async deleteByUserItem(userId: Uuid, itemId: Uuid, options: UserItemDeleteOptions = null): Promise<void> {
 		const userItem = await this.byUserAndItemId(userId, itemId);
 		if (!userItem) throw new ErrorNotFound(`No such user_item: ${userId} / ${itemId}`);
-		await this.deleteBy({ byUserItem: userItem });
+		await this.deleteBy({ ...options, byUserItem: userItem });
 	}
 
-	public async deleteByItemIds(itemIds: Uuid[]): Promise<void> {
-		await this.deleteBy({ byItemIds: itemIds });
+	public async deleteByItemIds(itemIds: Uuid[], options: UserItemDeleteOptions = null): Promise<void> {
+		await this.deleteBy({ ...options, byItemIds: itemIds });
 	}
 
 	public async deleteByShareId(shareId: Uuid): Promise<void> {
@@ -152,6 +153,11 @@ export default class UserItemModel extends BaseModel<UserItem> {
 	}
 
 	private async deleteBy(options: UserItemDeleteOptions = {}): Promise<void> {
+		options = {
+			recordChanges: true,
+			...options,
+		};
+
 		let userItems: UserItem[] = [];
 
 		if (options.byShareId && options.byUserId) {
@@ -180,7 +186,7 @@ export default class UserItemModel extends BaseModel<UserItem> {
 			for (const userItem of userItems) {
 				const item = items.find(i => i.id === userItem.item_id);
 
-				if (this.models().item().shouldRecordChange(item.name)) {
+				if (options.recordChanges && this.models().item().shouldRecordChange(item.name)) {
 					await this.models().change().save({
 						item_type: ItemType.UserItem,
 						item_id: userItem.item_id,

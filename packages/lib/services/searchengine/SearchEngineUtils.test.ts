@@ -7,16 +7,15 @@ const Note = require('../../models/Note').default;
 
 let searchEngine: any = null;
 
-describe('services_SearchEngineUtils', function() {
-	beforeEach(async (done) => {
+describe('services_SearchEngineUtils', () => {
+	beforeEach(async () => {
 		await setupDatabaseAndSynchronizer(1);
 		await switchClient(1);
 		searchEngine = new SearchEngine();
 		searchEngine.setDb(db());
-		done();
 	});
 
-	describe('filter todos based on showCompletedTodos', function() {
+	describe('filter todos based on showCompletedTodos', () => {
 		it('show completed', (async () => {
 			const note1 = await Note.save({ title: 'abcd', body: 'body 1' });
 			const todo1 = await Note.save({ title: 'abcd', body: 'todo 1', is_todo: 1 });

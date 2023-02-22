@@ -45,7 +45,7 @@ export function themeById(themeId: string) {
 // globalStyle should be used for properties that do not change across themes
 // i.e. should not be used for colors
 const globalStyle: any = {
-	fontFamily: 'Roboto',// 'sans-serif',
+	fontFamily: 'Roboto', // 'sans-serif',
 	margin: 15, // No text and no interactive component should be within this margin
 	itemMarginTop: 10,
 	itemMarginBottom: 10,
@@ -60,7 +60,7 @@ const globalStyle: any = {
 	toolbarPadding: 6,
 	appearance: 'light',
 	mainPadding: 12,
-	topRowHeight: 50,
+	topRowHeight: 81,
 	editorPaddingLeft: 8,
 };
 
@@ -227,6 +227,7 @@ function addExtraStyles(style: any) {
 		justifyContent: 'center',
 		marginRight: 8,
 		borderRadius: 100,
+		borderWidth: 0,
 	};
 
 	style.toolbarStyle = {

@@ -20,6 +20,12 @@ You can pass [arguments](https://github.com/laurent22/joplin/blob/dev/Joplin_ins
 
 <pre><code style="word-break: break-all">wget -O - https://raw.githubusercontent.com/laurent22/joplin/dev/Joplin_install_and_update.sh | bash -s -- --argument1 --argument2</code></pre>
 
+## Desktop application will not launch on Linux
+
+If you downloaded the AppImage directly and therefore did not install via the recommended script then it may not be currently allowed to execute and needs to have these permissions set manually (see [AppImage User Guide](https://docs.appimage.org/introduction/quickstart.html#how-to-run-an-AppImage)).
+
+If execution permissions are correct and it still does not launch then your system may not have the `libfuse2` library that AppImages require to run. This library requirement is inherent to the AppImage format and not Joplin specifically. For more info see [this forum thread](https://discourse.joplinapp.org/t/appimage-incompatibility-in-ubuntu-22-04/25173) which has further detail on the issue and an [Ubuntu specific fix](https://discourse.joplinapp.org/t/appimage-incompatibility-in-ubuntu-22-04/25173/12).
+
 ## How can I edit my note in an external text editor?
 
 The editor command (may include arguments) defines which editor will be used to open a note. If none is provided it will try to auto-detect the default editor. If this does nothing or you want to change it for Joplin, you need to configure it in the Preferences -> Text editor command.
@@ -78,7 +84,7 @@ You may use a special keyboard such as [Multiling O Keyboard](https://play.googl
 
 ## The initial sync is very slow, how can I speed it up?
 
-Whenever importing a large number of notes, for example from Evernote, it may take a very long time for the first sync to complete. There are various techniques to speed thing up (if you don't want to simply wait for the sync to complete), which are outlined in [this post](https://discourse.joplinapp.org/t/workaround-for-slow-initial-bulk-sync-after-evernote-import/746?u=laurent).
+Whenever importing a large number of notes, for example from Evernote, it may take a very long time for the first sync to complete. There are various techniques to speed this up (if you don't want to simply wait for the sync to complete), which are outlined in [this post](https://discourse.joplinapp.org/t/workaround-for-slow-initial-bulk-sync-after-evernote-import/746?u=laurent).
 
 ## Not all notes, folders, or tags are displayed on the mobile app
 
@@ -101,7 +107,7 @@ Unfortunately it is not possible. Joplin synchronises with file systems using an
 
 The end to end encryption that Joplin implements is to protect the data during transmission and on the cloud service so that only you can access it.
 
-On the local device it is assumed that the data is safe due to the OS built-in security features. If additional security is needed it's always possible to put the notes on an encrypted Truecrypt drive for instance.
+On the local device it is assumed that the data is safe due to the OS built-in security features. If additional security is needed it's always possible to put the notes on an encrypted VeraCrypt drive for instance.
 
 For these reasons, because the OS or yourself can easily protect the local data, no PIN or password is currently supported to access Joplin.
 
@@ -126,13 +132,14 @@ In this case, [make sure you enter the correct WebDAV URL](https://github.com/la
 
 ### The following WebDAV hosts are not supported
 
-- Jianguoyun.com (see [Github issue](https://github.com/laurent22/joplin/issues/4294))
+- Jianguoyun (see [Github issue](https://github.com/laurent22/joplin/issues/4294))
+- pCloud (see [Forum thread](https://discourse.joplinapp.org/t/feature-request-pcloud-synchronisation/3530/51))
 
 ### Nextcloud sync is not working
 
 - Check your username and password. **Type it manually** (without copying and pasting it) and try again.
 - Check the WebDAV URL - to get the correct URL, go to Nextcloud and, in the left sidebar, click on "Settings" and copy the WebDAV URL from there. **Do not forget to add the folder you've created to that URL**. For example, if the base the WebDAV URL is "https://example.com/nextcloud/remote.php/webdav/" and you want the notes to be synced in the "Joplin" directory, you need to give the URL "https://example.com/nextcloud/remote.php/webdav/Joplin" **and you need to create the "Joplin" directory yourself**.
-- Did you enable **2FA** (Multi-factor authentication) on Nextcloud? In that case, you need to [create a one-time password for Joplin on the Nextcloud admin interface](https://github.com/laurent22/joplin/issues/1453#issuecomment-486640902).
+- Did you enable **2FA** (Multi-factor authentication) on Nextcloud? In that case, you need to [create an app password for Joplin in the Nextcloud admin interface](https://github.com/laurent22/joplin/issues/1453#issuecomment-486640902).
 
 ## How can I use self-signed SSL certificates on Android?
 

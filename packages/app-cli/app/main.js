@@ -26,7 +26,7 @@ const sharp = require('sharp');
 const { shimInit } = require('@joplin/lib/shim-init-node.js');
 const shim = require('@joplin/lib/shim').default;
 const { _ } = require('@joplin/lib/locale');
-const { FileApiDriverLocal } = require('@joplin/lib/file-api-driver-local.js');
+const { FileApiDriverLocal } = require('@joplin/lib/file-api-driver-local');
 const EncryptionService = require('@joplin/lib/services/e2ee/EncryptionService').default;
 const envFromArgs = require('@joplin/lib/envFromArgs');
 const nodeSqlite = require('sqlite3');
@@ -75,20 +75,20 @@ if (process.platform === 'win32') {
 		output: process.stdout,
 	});
 
-	rl.on('SIGINT', function() {
+	rl.on('SIGINT', () => {
 		process.emit('SIGINT');
 	});
 }
 
-process.stdout.on('error', function(err) {
+process.stdout.on('error', (error) => {
 	// https://stackoverflow.com/questions/12329816/error-write-epipe-when-piping-node-output-to-head#15884508
-	if (err.code == 'EPIPE') {
+	if (error.code === 'EPIPE') {
 		process.exit(0);
 	}
 });
 
 application.start(process.argv).catch(error => {
-	if (error.code == 'flagError') {
+	if (error.code === 'flagError') {
 		console.error(error.message);
 		console.error(_('Type `joplin help` for usage information.'));
 	} else {

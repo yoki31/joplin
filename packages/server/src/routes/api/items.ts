@@ -7,10 +7,11 @@ import { AppContext } from '../../utils/types';
 import * as fs from 'fs-extra';
 import { ErrorForbidden, ErrorMethodNotAllowed, ErrorNotFound, ErrorPayloadTooLarge, errorToPlainObject } from '../../utils/errors';
 import ItemModel, { ItemSaveOption, SaveFromRawContentItem } from '../../models/ItemModel';
-import { requestDeltaPagination, requestPagination } from '../../models/utils/pagination';
+import { requestPagination } from '../../models/utils/pagination';
 import { AclAction } from '../../models/BaseModel';
 import { safeRemove } from '../../utils/fileUtils';
 import { formatBytes, MB } from '../../utils/bytes';
+import { requestDeltaPagination } from '../../models/ChangeModel';
 
 const router = new Router(RouteType.Api);
 
@@ -37,7 +38,7 @@ export async function putItemContents(path: SubPath, ctx: AppContext, isBatch: b
 
 		if (totalSize > batchMaxSize) throw new ErrorPayloadTooLarge(`Size of items (${formatBytes(totalSize)}) is over the limit (${formatBytes(batchMaxSize)})`);
 	} else {
-		const filePath = parsedBody?.files?.file ? parsedBody.files.file.path : null;
+		const filePath = parsedBody?.files?.file ? parsedBody.files.file.filepath : null;
 
 		try {
 			const buffer = filePath ? await fs.readFile(filePath) : Buffer.alloc(0);
@@ -48,7 +49,7 @@ export async function putItemContents(path: SubPath, ctx: AppContext, isBatch: b
 			// include the "share_id" field property so it doesn't need to be set via
 			// query parameter.
 			if (ctx.query['share_id']) {
-				saveOptions.shareId = ctx.query['share_id'];
+				saveOptions.shareId = ctx.query['share_id'] as string;
 				await ctx.joplin.models.item().checkIfAllowed(ctx.joplin.owner, AclAction.Create, { jop_share_id: saveOptions.shareId });
 			}
 

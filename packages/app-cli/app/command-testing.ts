@@ -1,4 +1,4 @@
-const { BaseCommand } = require('./base-command.js');
+const BaseCommand = require('./base-command').default;
 import { reg } from '@joplin/lib/registry';
 import Note from '@joplin/lib/models/Note';
 import uuid from '@joplin/lib/uuid';
@@ -118,6 +118,7 @@ class Command extends BaseCommand {
 			}
 			await Promise.all(promises);
 
+			// eslint-disable-next-line no-console
 			console.info(await api.exec('GET', 'api/items/root:/testing:'));
 		}
 

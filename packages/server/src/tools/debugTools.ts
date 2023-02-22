@@ -3,6 +3,7 @@ import { DbConnection, dropTables, migrateLatest } from '../db';
 import newModelFactory from '../models/factory';
 import { AccountType } from '../models/UserModel';
 import { User, UserFlagType } from '../services/database/types';
+import { Minute, Second } from '../utils/time';
 import { Config } from '../utils/types';
 
 export interface CreateTestUsersOptions {
@@ -32,7 +33,7 @@ export async function createTestUsers(db: DbConnection, config: Config, options:
 		...options,
 	};
 
-	const password = 'hunter1hunter2hunter3';
+	const password = '111111';
 
 	const models = newModelFactory(db, config);
 
@@ -53,11 +54,12 @@ export async function createTestUsers(db: DbConnection, config: Config, options:
 		await dropTables(db);
 		await migrateLatest(db);
 
-		for (let userNum = 1; userNum <= 2; userNum++) {
+		for (let userNum = 1; userNum <= 3; userNum++) {
 			await models.user().save({
 				email: `user${userNum}@example.com`,
 				password,
 				full_name: `User ${userNum}`,
+				account_type: AccountType.Pro,
 			});
 		}
 
@@ -96,5 +98,17 @@ export async function createTestUsers(db: DbConnection, config: Config, options:
 			await time.sleep(2);
 			await models.userFlag().add(user.id, UserFlagType.FailedPaymentWarning);
 		}
+	}
+}
+
+export async function createUserDeletions(db: DbConnection, config: Config) {
+	const models = newModelFactory(db, config);
+
+	const users = await models.user().all();
+
+	for (let i = 0; i < 3; i++) {
+		if (i >= users.length) break;
+		if (users[i].is_admin) continue;
+		await models.userDeletion().add(users[i].id, Date.now() + 60 * Second + (i * 10 * Minute));
 	}
 }

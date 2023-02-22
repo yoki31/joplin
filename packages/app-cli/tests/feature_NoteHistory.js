@@ -22,17 +22,15 @@ const goToNote = (testApp, note) => {
 	testApp.dispatch({ type: 'NOTE_SELECT', id: note.id });
 };
 
-describe('feature_NoteHistory', function() {
-	beforeEach(async (done) => {
+describe('feature_NoteHistory', () => {
+	beforeEach(async () => {
 		testApp = new TestApp();
 		await testApp.start(['--no-welcome']);
-		done();
 	});
 
-	afterEach(async (done) => {
-		if (testApp !== null) await testApp.destroy();
+	afterEach(async () => {
+		if (testApp) await testApp.destroy();
 		testApp = null;
-		done();
 	});
 
 	it('should save history when navigating through notes', (async () => {

@@ -9,7 +9,7 @@ import ResourceFetcher from '../../services/ResourceFetcher';
 import MasterKey from '../../models/MasterKey';
 import BaseItem from '../../models/BaseItem';
 import Synchronizer from '../../Synchronizer';
-import { getEncryptionEnabled, setEncryptionEnabled } from '../synchronizer/syncInfoUtils';
+import { fetchSyncInfo, getEncryptionEnabled, localSyncInfo, setEncryptionEnabled } from '../synchronizer/syncInfoUtils';
 import { loadMasterKeysFromSettings, setupAndDisableEncryption, setupAndEnableEncryption } from '../e2ee/utils';
 
 let insideBeforeEach = false;
@@ -18,15 +18,14 @@ function newResourceFetcher(synchronizer: Synchronizer) {
 	return new ResourceFetcher(() => { return synchronizer.api(); });
 }
 
-describe('Synchronizer.e2ee', function() {
+describe('Synchronizer.e2ee', () => {
 
-	beforeEach(async (done) => {
+	beforeEach(async () => {
 		insideBeforeEach = true;
 
 		await setupDatabaseAndSynchronizer(1);
 		await setupDatabaseAndSynchronizer(2);
 		await switchClient(1);
-		done();
 
 		insideBeforeEach = false;
 	});
@@ -73,7 +72,33 @@ describe('Synchronizer.e2ee', function() {
 		expect(!folder1_2.encryption_cipher_text).toBe(true);
 	}));
 
-	it('should enable encryption automatically when downloading new master key (and none was previously available)',(async () => {
+	it('should mark the key has having been used when synchronising the first time', (async () => {
+		setEncryptionEnabled(true);
+		await loadEncryptionMasterKey();
+		await Folder.save({ title: 'folder1' });
+		await synchronizerStart();
+
+		const localInfo = localSyncInfo();
+		const remoteInfo = await fetchSyncInfo(fileApi());
+		expect(localInfo.masterKeys[0].hasBeenUsed).toBe(true);
+		expect(remoteInfo.masterKeys[0].hasBeenUsed).toBe(true);
+	}));
+
+	it('should mark the key has having been used when synchronising after enabling encryption', (async () => {
+		await Folder.save({ title: 'folder1' });
+		await synchronizerStart();
+
+		setEncryptionEnabled(true);
+		await loadEncryptionMasterKey();
+		await synchronizerStart();
+
+		const localInfo = localSyncInfo();
+		const remoteInfo = await fetchSyncInfo(fileApi());
+		expect(localInfo.masterKeys[0].hasBeenUsed).toBe(true);
+		expect(remoteInfo.masterKeys[0].hasBeenUsed).toBe(true);
+	}));
+
+	it('should enable encryption automatically when downloading new master key (and none was previously available)', (async () => {
 		// Enable encryption on client 1 and sync an item
 		setEncryptionEnabled(true);
 		await loadEncryptionMasterKey();

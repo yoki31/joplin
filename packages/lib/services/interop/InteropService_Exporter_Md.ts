@@ -72,7 +72,7 @@ export default class InteropService_Exporter_Md extends InteropService_Exporter_
 		for (let i = 0; i < linkedItemIds.length; i++) {
 			const id = linkedItemIds[i];
 			const itemPath = fn_createRelativePath(paths[id]);
-			newBody = newBody.replace(new RegExp(`:/${id}`, 'g'), itemPath);
+			newBody = newBody.replace(new RegExp(`:/${id}`, 'g'), markdownUtils.escapeLinkUrl(itemPath));
 		}
 
 		return newBody;
@@ -102,7 +102,7 @@ export default class InteropService_Exporter_Md extends InteropService_Exporter_
 
 			// Strip the absolute path to export dir and keep only the relative paths
 			const destDir = this.destDir_;
-			Object.keys(context.notePaths).map(function(id) {
+			Object.keys(context.notePaths).map((id) => {
 				context.notePaths[id] = context.notePaths[id].substr(destDir.length + 1);
 			});
 

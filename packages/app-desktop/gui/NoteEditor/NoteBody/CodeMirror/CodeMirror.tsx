@@ -16,6 +16,7 @@ import NoteTextViewer from '../../../NoteTextViewer';
 import Editor from './Editor';
 import usePluginServiceRegistration from '../../utils/usePluginServiceRegistration';
 import Setting from '@joplin/lib/models/Setting';
+import Note from '@joplin/lib/models/Note';
 import { _ } from '@joplin/lib/locale';
 import bridge from '../../../../services/bridge';
 import markdownUtils from '@joplin/lib/markdownUtils';
@@ -30,12 +31,15 @@ import dialogs from '../../../dialogs';
 import convertToScreenCoordinates from '../../../utils/convertToScreenCoordinates';
 import { MarkupToHtml } from '@joplin/renderer';
 const { clipboard } = require('electron');
-const shared = require('@joplin/lib/components/shared/note-screen-shared.js');
+const debounce = require('debounce');
+import shared from '@joplin/lib/components/shared/note-screen-shared';
 const Menu = bridge().Menu;
 const MenuItem = bridge().MenuItem;
 import { reg } from '@joplin/lib/registry';
 import ErrorBoundary from '../../../ErrorBoundary';
 import { MarkupToHtmlOptions } from '../../utils/useMarkupToHtml';
+import eventManager from '@joplin/lib/eventManager';
+import { EditContextMenuFilterObject } from '@joplin/lib/services/plugins/api/JoplinWorkspace';
 
 const menuUtils = new MenuUtils(CommandService.instance());
 
@@ -65,7 +69,7 @@ function CodeMirror(props: NoteBodyEditorProps, ref: any) {
 
 	usePluginServiceRegistration(ref);
 
-	const { resetScroll, editor_scroll, setEditorPercentScroll, setViewerPercentScroll, editor_resize,
+	const { resetScroll, editor_scroll, setEditorPercentScroll, setViewerPercentScroll, editor_resize, editor_update, getLineScrollPercent,
 	} = useScrollHandler(editorRef, webviewRef, props.onScroll);
 
 	const codeMirror_change = useCallback((newBody: string) => {
@@ -114,7 +118,7 @@ function CodeMirror(props: NoteBodyEditorProps, ref: any) {
 			scrollTo: (options: ScrollOptions) => {
 				if (options.type === ScrollOptionTypes.Hash) {
 					if (!webviewRef.current) return;
-					webviewRef.current.wrappedInstance.send('scrollToHash', options.value as string);
+					webviewRef.current.send('scrollToHash', options.value as string);
 				} else if (options.type === ScrollOptionTypes.Percent) {
 					const percent = options.value as number;
 					setEditorPercentScroll(percent);
@@ -149,9 +153,10 @@ function CodeMirror(props: NoteBodyEditorProps, ref: any) {
 					if (props.visiblePanes.indexOf('editor') >= 0) {
 						editorRef.current.focus();
 					} else {
-						// If we just call wrappedInstance.focus() then the iframe is focused,
-						// but not its content, such that scrolling up / down with arrow keys fails
-						webviewRef.current.wrappedInstance.send('focus');
+						// If we just call focus() then the iframe is focused,
+						// but not its content, such that scrolling up / down
+						// with arrow keys fails
+						webviewRef.current.send('focus');
 					}
 				} else {
 					commandProcessed = false;
@@ -234,9 +239,11 @@ function CodeMirror(props: NoteBodyEditorProps, ref: any) {
 							if (!('args' in value)) value.args = [];
 
 							if (editorRef.current[value.name]) {
-								editorRef.current[value.name](...value.args);
+								const result = editorRef.current[value.name](...value.args);
+								return result;
 							} else if (editorRef.current.commandExists(value.name)) {
-								editorRef.current.execCommand(value.name);
+								const result = editorRef.current.execCommand(value.name);
+								return result;
 							} else {
 								reg.logger().warn('CodeMirror execCommand: unsupported command: ', value.name);
 							}
@@ -255,7 +262,8 @@ function CodeMirror(props: NoteBodyEditorProps, ref: any) {
 				return commandOutput;
 			},
 		};
-	}, [props.content, props.visiblePanes, addListItem, wrapSelectionWithStrings, setEditorPercentScroll, setViewerPercentScroll, resetScroll, renderedBody]);
+		// eslint-disable-next-line @seiyab/react-hooks/exhaustive-deps -- Old code before rule was applied
+	}, [props.content, props.visiblePanes, addListItem, wrapSelectionWithStrings, setEditorPercentScroll, setViewerPercentScroll, resetScroll]);
 
 	const onEditorPaste = useCallback(async (event: any = null) => {
 		const resourceMds = await handlePasteEvent(event);
@@ -268,11 +276,22 @@ function CodeMirror(props: NoteBodyEditorProps, ref: any) {
 	const editorCutText = useCallback(() => {
 		if (editorRef.current) {
 			const selections = editorRef.current.getSelections();
-			if (selections.length > 0) {
+			if (selections.length > 0 && selections[0]) {
 				clipboard.writeText(selections[0]);
 				// Easy way to wipe out just the first selection
 				selections[0] = '';
 				editorRef.current.replaceSelections(selections);
+			} else {
+				const cursor = editorRef.current.getCursor();
+				const line = editorRef.current.getLine(cursor.line);
+				clipboard.writeText(`${line}\n`);
+				const startLine = editorRef.current.getCursor('head');
+				startLine.ch = 0;
+				const endLine = {
+					line: startLine.line + 1,
+					ch: 0,
+				};
+				editorRef.current.replaceRange('', startLine, endLine);
 			}
 		}
 	}, []);
@@ -280,15 +299,25 @@ function CodeMirror(props: NoteBodyEditorProps, ref: any) {
 	const editorCopyText = useCallback(() => {
 		if (editorRef.current) {
 			const selections = editorRef.current.getSelections();
-			if (selections.length > 0) {
+
+
+			// Handle the case when there is a selection - copy the selection to the clipboard
+			// When there is no selection, the selection array contains an empty string.
+			if (selections.length > 0 && selections[0]) {
 				clipboard.writeText(selections[0]);
+			} else {
+				// This is the case when there is no selection - copy the current line to the clipboard
+				const cursor = editorRef.current.getCursor();
+				const line = editorRef.current.getLine(cursor.line);
+				clipboard.writeText(line);
 			}
 		}
 	}, []);
 
-	const editorPasteText = useCallback(() => {
+	const editorPasteText = useCallback(async () => {
 		if (editorRef.current) {
-			editorRef.current.replaceSelection(clipboard.readText());
+			const modifiedMd = await Note.replaceResourceExternalToInternalLinks(clipboard.readText(), { useAbsolutePaths: true });
+			editorRef.current.replaceSelection(modifiedMd);
 		}
 	}, []);
 
@@ -296,7 +325,7 @@ function CodeMirror(props: NoteBodyEditorProps, ref: any) {
 		const clipboardText = clipboard.readText();
 
 		if (clipboardText) {
-			editorPasteText();
+			void editorPasteText();
 		} else {
 			// To handle pasting images
 			void onEditorPaste();
@@ -334,9 +363,9 @@ function CodeMirror(props: NoteBodyEditorProps, ref: any) {
 		let cancelled = false;
 
 		async function loadScripts() {
-			const scriptsToLoad: {src: string; id: string; loaded: boolean}[] = [
+			const scriptsToLoad: { src: string; id: string; loaded: boolean }[] = [
 				{
-					src: 'build/lib/codemirror/addon/dialog/dialog.css',
+					src: `${bridge().vendorDir()}/lib/codemirror/addon/dialog/dialog.css`,
 					id: 'codemirrorDialogStyle',
 					loaded: false,
 				},
@@ -351,7 +380,7 @@ function CodeMirror(props: NoteBodyEditorProps, ref: any) {
 				if (theme.indexOf('solarized') >= 0) theme = 'solarized';
 
 				scriptsToLoad.push({
-					src: `build/lib/codemirror/theme/${theme}.css`,
+					src: `${bridge().vendorDir()}/lib/codemirror/theme/${theme}.css`,
 					id: `codemirrorTheme${theme}`,
 					loaded: false,
 				});
@@ -396,7 +425,7 @@ function CodeMirror(props: NoteBodyEditorProps, ref: any) {
 		const maxWidthCss = props.contentMaxWidth ? `
 			margin-right: auto !important;
 			margin-left: auto !important;
-			max-width: ${props.contentMaxWidth}px !important;	
+			max-width: ${props.contentMaxWidth}px !important;
 		` : '';
 
 		const element = document.createElement('style');
@@ -461,6 +490,10 @@ function CodeMirror(props: NoteBodyEditorProps, ref: any) {
 				color: ${theme.color};
 			}
 
+			div.CodeMirror span.cm-variable-2, div.CodeMirror span.cm-variable-3, div.CodeMirror span.cm-keyword {
+				color: ${theme.color};
+			}
+
 			div.CodeMirror span.cm-quote {
 				color: ${theme.color};
 				opacity: ${theme.blockQuoteOpacity};
@@ -473,10 +506,6 @@ function CodeMirror(props: NoteBodyEditorProps, ref: any) {
 			div.CodeMirror span.cm-url {
 				color: ${theme.urlColor};
 				opacity: 0.5;
-			}
-
-			div.CodeMirror span.cm-variable-2, div.CodeMirror span.cm-variable-3, div.CodeMirror span.cm-keyword {
-				color: ${theme.color};
 			}
 
 			div.CodeMirror span.cm-comment {
@@ -498,10 +527,6 @@ function CodeMirror(props: NoteBodyEditorProps, ref: any) {
 				padding-left: .2em;
 			}
 
-			div.CodeMirror span.cm-strong {
-				color: ${theme.colorBright};
-			}
-
 			div.CodeMirror span.cm-hr {
 				color: ${theme.dividerColor};
 			}
@@ -515,8 +540,9 @@ function CodeMirror(props: NoteBodyEditorProps, ref: any) {
 				color: ${theme.searchMarkerColor} !important;
 			}
 
+			/* We need !important because the search marker is overridden by CodeMirror's own text selection marker */
 			.cm-search-marker-selected {
-				background: ${theme.selectedColor2};
+				background: ${theme.selectedColor2} !important;
 				color: ${theme.color2} !important;
 			}
 
@@ -564,6 +590,7 @@ function CodeMirror(props: NoteBodyEditorProps, ref: any) {
 		return () => {
 			document.head.removeChild(element);
 		};
+		// eslint-disable-next-line @seiyab/react-hooks/exhaustive-deps -- Old code before rule was applied
 	}, [props.themeId, props.contentMaxWidth]);
 
 	const webview_domReady = useCallback(() => {
@@ -576,9 +603,14 @@ function CodeMirror(props: NoteBodyEditorProps, ref: any) {
 		const arg0 = args && args.length >= 1 ? args[0] : null;
 
 		if (msg.indexOf('checkboxclick:') === 0) {
-			const newBody = shared.toggleCheckbox(msg, props.content);
+			const { line, from, to } = shared.toggleCheckboxRange(msg, props.content);
 			if (editorRef.current) {
-				editorRef.current.updateBody(newBody);
+				// To cancel CodeMirror's layout drift, the scroll position
+				// is recorded before updated, and then it is restored.
+				// Ref. https://github.com/laurent22/joplin/issues/5890
+				const percent = getLineScrollPercent();
+				editorRef.current.replaceRange(line, from, to);
+				setEditorPercentScroll(percent);
 			}
 		} else if (msg === 'percentScroll') {
 			const percent = arg0;
@@ -586,6 +618,7 @@ function CodeMirror(props: NoteBodyEditorProps, ref: any) {
 		} else {
 			props.onMessage(event);
 		}
+		// eslint-disable-next-line @seiyab/react-hooks/exhaustive-deps -- Old code before rule was applied
 	}, [props.onMessage, props.content, setEditorPercentScroll]);
 
 	useEffect(() => {
@@ -608,6 +641,10 @@ function CodeMirror(props: NoteBodyEditorProps, ref: any) {
 				resourceInfos: props.resourceInfos,
 				contentMaxWidth: props.contentMaxWidth,
 				mapsToLine: true,
+				// Always using useCustomPdfViewer for now, we can add a new setting for it in future if we need to.
+				useCustomPdfViewer: props.useCustomPdfViewer,
+				noteId: props.noteId,
+				vendorDir: bridge().vendorDir(),
 			}));
 
 			if (cancelled) return;
@@ -627,6 +664,7 @@ function CodeMirror(props: NoteBodyEditorProps, ref: any) {
 			cancelled = true;
 			shim.clearTimeout(timeoutId);
 		};
+		// eslint-disable-next-line @seiyab/react-hooks/exhaustive-deps -- Old code before rule was applied
 	}, [props.content, props.contentKey, renderedBodyContentKey, props.contentMarkupLanguage, props.visiblePanes, props.resourceInfos, props.markupToHtml]);
 
 	useEffect(() => {
@@ -642,15 +680,21 @@ function CodeMirror(props: NoteBodyEditorProps, ref: any) {
 		// mounted, webviewReady might be true, but webviewRef.current will be
 		// undefined. Maybe due to the error boundary that unmount components.
 		// Since we can't do much about it we just print an error.
-		if (webviewRef.current && webviewRef.current.wrappedInstance) {
-			webviewRef.current.wrappedInstance.send('setHtml', renderedBody.html, options);
+		if (webviewRef.current) {
+			// To keep consistency among CodeMirror's editing and scroll percents
+			// of Editor and Viewer.
+			const percent = getLineScrollPercent();
+			setEditorPercentScroll(percent);
+			options.percent = percent;
+			webviewRef.current.send('setHtml', renderedBody.html, options);
 		} else {
 			console.error('Trying to set HTML on an undefined webview ref');
 		}
+		// eslint-disable-next-line @seiyab/react-hooks/exhaustive-deps -- Old code before rule was applied
 	}, [renderedBody, webviewReady]);
 
 	useEffect(() => {
-		if (!props.searchMarkers) return;
+		if (!props.searchMarkers) return () => {};
 
 		// If there is a currently active search, it's important to re-search the text as the user
 		// types. However this is slow for performance so we ONLY want it to happen when there is
@@ -661,15 +705,24 @@ function CodeMirror(props: NoteBodyEditorProps, ref: any) {
 		// props.content has been updated).
 		const textChanged = props.searchMarkers.keywords.length > 0 && (props.content !== previousContent || renderedBody !== previousRenderedBody);
 
-		if (props.searchMarkers !== previousSearchMarkers || textChanged) {
-			webviewRef.current.wrappedInstance.send('setMarkers', props.searchMarkers.keywords, props.searchMarkers.options);
+		if (webviewRef.current && (props.searchMarkers !== previousSearchMarkers || textChanged)) {
+			webviewRef.current.send('setMarkers', props.searchMarkers.keywords, props.searchMarkers.options);
 
 			if (editorRef.current) {
-				const matches = editorRef.current.setMarkers(props.searchMarkers.keywords, props.searchMarkers.options);
+				// Fixes https://github.com/laurent22/joplin/issues/7565
+				const debouncedMarkers = debounce(() => {
+					const matches = editorRef.current.setMarkers(props.searchMarkers.keywords, props.searchMarkers.options);
 
-				props.setLocalSearchResultCount(matches);
+					props.setLocalSearchResultCount(matches);
+				}, 50);
+				debouncedMarkers();
+				return () => {
+					debouncedMarkers.clear();
+				};
 			}
 		}
+		return () => {};
+		// eslint-disable-next-line @seiyab/react-hooks/exhaustive-deps -- Old code before rule was applied
 	}, [props.searchMarkers, previousSearchMarkers, props.setLocalSearchResultCount, props.content, previousContent, renderedBody, previousRenderedBody, renderedBody]);
 
 	const cellEditorStyle = useMemo(() => {
@@ -695,6 +748,8 @@ function CodeMirror(props: NoteBodyEditorProps, ref: any) {
 		return output;
 	}, [styles.cellViewer, props.visiblePanes]);
 
+	const editorPaneVisible = props.visiblePanes.indexOf('editor') >= 0;
+
 	useEffect(() => {
 		if (!editorRef.current) return;
 
@@ -702,10 +757,10 @@ function CodeMirror(props: NoteBodyEditorProps, ref: any) {
 		// we should focus the editor
 		// The intuition is that a panel toggle (with editor in view) is the equivalent of
 		// an editor interaction so users should expect the editor to be focused
-		if (props.visiblePanes.indexOf('editor') >= 0) {
+		if (editorPaneVisible) {
 			editorRef.current.focus();
 		}
-	}, [props.visiblePanes]);
+	}, [editorPaneVisible]);
 
 	useEffect(() => {
 		if (!editorRef.current) return;
@@ -726,15 +781,19 @@ function CodeMirror(props: NoteBodyEditorProps, ref: any) {
 	// It might be buggy, refer to the below issue
 	// https://github.com/laurent22/joplin/pull/3974#issuecomment-718936703
 	useEffect(() => {
-		function pointerInsideEditor(x: number, y: number) {
+		function pointerInsideEditor(params: any) {
+			const x = params.x, y = params.y, isEditable = params.isEditable, inputFieldType = params.inputFieldType;
 			const elements = document.getElementsByClassName('codeMirrorEditor');
-			if (!elements.length) return null;
+
+			// inputFieldType: The input field type of CodeMirror is "textarea" so the inputFieldType = "none",
+			// and any single-line input above codeMirror has inputFieldType value according to the type of input e.g.(text = plainText, password = password, ...).
+			if (!elements.length || !isEditable || inputFieldType !== 'none') return null;
 			const rect = convertToScreenCoordinates(Setting.value('windowContentZoomFactor'), elements[0].getBoundingClientRect());
 			return rect.x < x && rect.y < y && rect.right > x && rect.bottom > y;
 		}
 
-		function onContextMenu(_event: any, params: any) {
-			if (!pointerInsideEditor(params.x, params.y)) return;
+		async function onContextMenu(_event: any, params: any) {
+			if (!pointerInsideEditor(params)) return;
 
 			const menu = new Menu();
 
@@ -787,6 +846,23 @@ function CodeMirror(props: NoteBodyEditorProps, ref: any) {
 				editorRef.current.alignSelection(params);
 			}
 
+			let filterObject: EditContextMenuFilterObject = {
+				items: [],
+			};
+
+			filterObject = await eventManager.filterEmit('editorContextMenu', filterObject);
+
+			for (const item of filterObject.items) {
+				menu.append(new MenuItem({
+					label: item.label,
+					click: async () => {
+						const args = item.commandArgs || [];
+						void CommandService.instance().execute(item.commandName, ...args);
+					},
+					type: item.type,
+				}));
+			}
+
 			menuUtils.pluginContextMenuItems(props.plugins, MenuItemLocation.EditorContextMenu).forEach((item: any) => {
 				menu.append(new MenuItem(item));
 			});
@@ -799,9 +875,12 @@ function CodeMirror(props: NoteBodyEditorProps, ref: any) {
 		return () => {
 			bridge().window().webContents.off('context-menu', onContextMenu);
 		};
+		// eslint-disable-next-line @seiyab/react-hooks/exhaustive-deps -- Old code before rule was applied
 	}, [props.plugins]);
 
 	function renderEditor() {
+
+		const matchBracesOptions = Setting.value('editor.autoMatchingBraces') ? { override: true, pairs: '``()[]{}\'\'""‘’“”（）《》「」『』【】〔〕〖〗〘〙〚〛' } : false;
 
 		return (
 			<div style={cellEditorStyle}>
@@ -813,7 +892,7 @@ function CodeMirror(props: NoteBodyEditorProps, ref: any) {
 					codeMirrorTheme={styles.editor.codeMirrorTheme}
 					style={styles.editor}
 					readOnly={props.visiblePanes.indexOf('editor') < 0}
-					autoMatchBraces={Setting.value('editor.autoMatchingBraces')}
+					autoMatchBraces={matchBracesOptions}
 					keyMap={props.keyboardMode}
 					plugins={props.plugins}
 					onChange={codeMirror_change}
@@ -821,6 +900,7 @@ function CodeMirror(props: NoteBodyEditorProps, ref: any) {
 					onEditorPaste={onEditorPaste}
 					isSafeMode={props.isSafeMode}
 					onResize={editor_resize}
+					onUpdate={editor_update}
 				/>
 			</div>
 		);
@@ -831,6 +911,7 @@ function CodeMirror(props: NoteBodyEditorProps, ref: any) {
 			<div style={cellViewerStyle}>
 				<NoteTextViewer
 					ref={webviewRef}
+					themeId={props.themeId}
 					viewerStyle={styles.viewer}
 					onIpcMessage={webview_ipcMessage}
 					onDomReady={webview_domReady}
@@ -857,4 +938,3 @@ function CodeMirror(props: NoteBodyEditorProps, ref: any) {
 }
 
 export default forwardRef(CodeMirror);
-

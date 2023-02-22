@@ -23,6 +23,7 @@ const defaultKeymapItems = {
 		{ accelerator: 'Cmd+C', command: 'textCopy' },
 		{ accelerator: 'Cmd+X', command: 'textCut' },
 		{ accelerator: 'Cmd+V', command: 'textPaste' },
+		{ accelerator: 'Cmd+Shift+V', command: 'pasteAsText' },
 		{ accelerator: 'Cmd+A', command: 'textSelectAll' },
 		{ accelerator: 'Cmd+B', command: 'textBold' },
 		{ accelerator: 'Cmd+I', command: 'textItalic' },
@@ -55,6 +56,9 @@ const defaultKeymapItems = {
 		{ accelerator: 'Option+Cmd+A', command: 'editor.sortSelectedLines' },
 		{ accelerator: 'Option+Up', command: 'editor.swapLineUp' },
 		{ accelerator: 'Option+Down', command: 'editor.swapLineDown' },
+		{ accelerator: 'Option+Cmd+1', command: 'switchProfile1' },
+		{ accelerator: 'Option+Cmd+2', command: 'switchProfile2' },
+		{ accelerator: 'Option+Cmd+3', command: 'switchProfile3' },
 	],
 	default: [
 		{ accelerator: 'Ctrl+N', command: 'newNote' },
@@ -64,6 +68,7 @@ const defaultKeymapItems = {
 		{ accelerator: 'Ctrl+C', command: 'textCopy' },
 		{ accelerator: 'Ctrl+X', command: 'textCut' },
 		{ accelerator: 'Ctrl+V', command: 'textPaste' },
+		{ accelerator: 'Ctrl+Shift+V', command: 'pasteAsText' },
 		{ accelerator: 'Ctrl+A', command: 'textSelectAll' },
 		{ accelerator: 'Ctrl+B', command: 'textBold' },
 		{ accelerator: 'Ctrl+I', command: 'textItalic' },
@@ -97,6 +102,9 @@ const defaultKeymapItems = {
 		{ accelerator: 'Ctrl+Alt+S', command: 'editor.sortSelectedLines' },
 		{ accelerator: 'Alt+Up', command: 'editor.swapLineUp' },
 		{ accelerator: 'Alt+Down', command: 'editor.swapLineDown' },
+		{ accelerator: 'Ctrl+Alt+1', command: 'switchProfile1' },
+		{ accelerator: 'Ctrl+Alt+2', command: 'switchProfile2' },
+		{ accelerator: 'Ctrl+Alt+3', command: 'switchProfile3' },
 	],
 };
 
@@ -192,8 +200,8 @@ export default class KeymapService extends BaseService {
 
 			// Refresh the menu items so that the changes are reflected
 			eventManager.emit('keymapChange');
-		} catch (err) {
-			const message = err.message || '';
+		} catch (error) {
+			const message = error.message || '';
 			throw new Error(_('Error: %s', message));
 		}
 	}
@@ -297,9 +305,9 @@ export default class KeymapService extends BaseService {
 			// Validate the entire keymap for duplicates
 			// Throws whenever there are duplicate Accelerators used in the keymap
 			this.validateKeymap();
-		} catch (err) {
+		} catch (error) {
 			this.resetKeymap(); // Discard all the changes if there are any issues
-			throw err;
+			throw error;
 		}
 	}
 
@@ -335,7 +343,7 @@ export default class KeymapService extends BaseService {
 			if (usedAccelerators.has(itemAccelerator)) {
 				const originalItem = (proposedKeymapItem && proposedKeymapItem.accelerator === itemAccelerator)
 					? proposedKeymapItem
-					: Object.values(this.keymap).find(_item => _item.accelerator == itemAccelerator);
+					: Object.values(this.keymap).find(_item => _item.accelerator === itemAccelerator);
 
 				throw new Error(_(
 					'Accelerator "%s" is used for "%s" and "%s" commands. This may lead to unexpected behaviour.',

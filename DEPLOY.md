@@ -6,7 +6,7 @@ Various scripts are provided to deploy the Joplin applications, scripts and tool
 
 Before new releases are created, all version numbers must be updated. This is done using the `setupNewRelease` script and passing it the new major.minor version number. For example:
 
-	yarn run setupNewRelease -- 1.8
+	yarn run setupNewRelease 1.8
 
 Patch numbers are going to be incremented automatically when releasing each individual package.
 
@@ -20,7 +20,7 @@ The desktop application is built for Windows, macOS and Linux via continuous int
 
 The app is built and upload to GitHub using:
 
-	yarn run releaseAndroid -- --type=prerelease
+	yarn run releaseAndroid --type=prerelease
 
 The "type" parameter can be either "release" or "prerelease"
 
@@ -74,4 +74,6 @@ First the types should generally be updated, using `./updateTypes.sh`. Then run:
 
 ## Plugin Repo Cli
 
-Since it has dependencies to the `@joplin` packages, it is released when running `yarn run publishAll`
+This tool is packaged using Webpack so it can be released with a single command:
+
+	yarn run releasePluginRepoCli

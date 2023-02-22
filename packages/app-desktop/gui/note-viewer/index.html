@@ -116,7 +116,7 @@
 			const now = Date.now();
 			if (now >= ignoreNextScrollTime_) ignoreNextScrollEventCount_ = 0;
 			if (ignoreNextScrollEventCount_ < 10) { // for safety
-				ignoreNextScrollTime_ = now + 200;
+				ignoreNextScrollTime_ = now + 1000;
 				ignoreNextScrollEventCount_ += 1;
 			}
 		};
@@ -137,8 +137,14 @@
 			// calculates viewer's GUI-dependent pixel-based raw percent
 			const viewerPercent = scrollmap.translateL2V(percent);
 			const newScrollTop = viewerPercent * maxScrollTop();
+
+			// Even if the scroll position hasn't changed (percent is the same),
+			// we still ignore the next scroll event, so that it doesn't create
+			// undesired side effects.
+			// https://github.com/laurent22/joplin/issues/7617
+			ignoreNextScrollEvent();
+			
 			if (Math.floor(contentElement.scrollTop) !== Math.floor(newScrollTop)) {
-				ignoreNextScrollEvent();
 				percentScroll_ = percent;
 				contentElement.scrollTop = newScrollTop;
 			}
@@ -158,19 +164,23 @@
 
 			for (let i = 0; i < assets.length; i++) {
 				const asset = assets[i];
+				// # and ? can be used in valid paths and shouldn't be treated as the start of a query or fragment
+				const encodedPath = asset.path
+						.replaceAll('#','%23')
+						.replaceAll('?','%3F')
 
-				const assetId = asset.name ? asset.name : asset.path;
+				const assetId = asset.name ? asset.name : encodedPath;
 				if (pluginAssetsAdded_[assetId]) continue;
 				pluginAssetsAdded_[assetId] = true;
 
 				if (asset.mime === 'application/javascript') {
 					const script = document.createElement('script');
-					script.src = asset.path;
+					script.src = encodedPath;
 					pluginAssetsContainer.appendChild(script);
 				} else if (asset.mime === 'text/css') {
 					const link = document.createElement('link');
 					link.rel = 'stylesheet';
-					link.href = asset.path;
+					link.href = encodedPath
 					pluginAssetsContainer.appendChild(link);
 				}
 			}
@@ -277,6 +287,9 @@
 		let restoreAndRefreshTimeoutID_ = null;
 		let restoreAndRefreshTimeout_ = Date.now();
 
+		// If 'noteRenderComplete' message is ongoing, resizing should not trigger a 'percentScroll' messsage.
+		let noteRenderCompleteMessageIsOngoing_ = false;
+
 		// A callback anonymous function invoked when the scroll height changes.
 		const onRendering = observeRendering((cause, height, heightChanged) => {
 			if (!alreadyAllImagesLoaded && !scrollmap.isPresent()) {
@@ -285,14 +298,17 @@
 					alreadyAllImagesLoaded = true;
 					scrollmap.refresh();
 					restorePercentScroll();
+					noteRenderCompleteMessageIsOngoing_ = true;
 					ipcProxySendToHost('noteRenderComplete');
 					return;
 				}
 			}
-			if (!heightChanged) return;
+			if (!heightChanged && cause !== 'dom-changed') return;
 			const restoreAndRefresh = () => {
 				scrollmap.refresh();
 				restorePercentScroll();
+				// To ensures Editor's scroll position is synced with Viewer's
+				if (!noteRenderCompleteMessageIsOngoing_) ipcProxySendToHost('percentScroll', percentScroll_);
 			};
 			const now = Date.now();
 			if (now < restoreAndRefreshTimeout_) {
@@ -331,7 +347,11 @@
 			contentElement.innerHTML = html;
 
 			scrollmap.create(event.options.markupLineCount);
-			restorePercentScroll(); // First, a quick treatment is applied.
+			if (typeof event.options.percent !== 'number') {
+				restorePercentScroll(); // First, a quick treatment is applied.
+			} else {
+				setPercentScroll(event.options.percent);
+			}
 
 			addPluginAssets(event.options.pluginAssets);
 
@@ -343,11 +363,13 @@
 
 			if (scrollmap.isPresent()) {
 				// Now, ready to receive scrollToHash/setPercentScroll from Editor.
+				noteRenderCompleteMessageIsOngoing_ = true;
 				ipcProxySendToHost('noteRenderComplete');
 			}
 		}
 
 		ipc.setPercentScroll = (event) => {
+			noteRenderCompleteMessageIsOngoing_ = false;
 			setPercentScroll(event.percent);
 		}
 
@@ -401,13 +423,21 @@
 
 			if ('separateWordSearch' in options) markKeywordOptions.separateWordSearch = options.separateWordSearch;
 
-			for (let i = 0; i < keywords.length; i++) {
-				let keyword = keywords[i];
-
-				markJsUtils.markKeyword(mark_, keyword, {
-					pregQuote: pregQuote,
-					replaceRegexDiacritics: replaceRegexDiacritics,
-				}, markKeywordOptions);
+			try {
+				for (const keyword of keywords) {
+					markJsUtils.markKeyword(mark_, keyword, {
+						pregQuote: pregQuote,
+						replaceRegexDiacritics: replaceRegexDiacritics,
+					}, markKeywordOptions);
+				}
+			} catch (error) {
+				if (error.name !== 'SyntaxError') {
+					throw error;
+				}
+				// An error of 'Regular expression too large' might occour in the markJs library
+				// when the input is really big, this catch is here to avoid the application crashing
+				// https://github.com/laurent22/joplin/issues/7634
+				console.error('Error while trying to highlight words from search: ', error);
 			}
 		}
 
@@ -430,7 +460,7 @@
 					setMarkers(markLoader_.whenDone.keywords, markLoader_.whenDone.options);
 				};
 
-				script.src = '../../build/lib/mark.js/dist/mark.min.js';
+				script.src = '../../vendor/lib/mark.js/dist/mark.min.js';
 				document.getElementById('joplin-container-markScriptContainer').appendChild(script);
 			} else if (markLoader_.state === 'ready') {
 				setMarkers(keywords, options);
@@ -567,6 +597,17 @@
 			}
 		}
 
+		ipc.textSelected = function(event) {
+			ipcProxySendToHost('contextMenu', {
+				type: 'text',
+				textToCopy: event.text,
+			});
+		}
+
+		ipc.openPdfViewer = function(event) {
+			ipcProxySendToHost('openPdfViewer', { resourceId: event.resourceId, mime: 'application/pdf', pageNo: event.pageNo || 1 });
+		}
+
 		window.addEventListener('hashchange', webviewLib.logEnabledEventHandler(e => {
 			if (!window.location.hash) return;
 
@@ -578,9 +619,24 @@
 		}));
 
 		document.addEventListener('contextmenu', webviewLib.logEnabledEventHandler(event => {
-			let element = event.target;
-
 			// To handle right clicks on resource icons
+			let element = event.target;
+			
+			// Mermaid svgs are wrapped inside a <pre> with class "mermaid"
+			let mermaidElement = element.closest(".mermaid")?.children[0];
+			if (mermaidElement) {
+				const svgString = new XMLSerializer().serializeToString(mermaidElement);
+				if (!!svgString) {
+					ipcProxySendToHost('contextMenu', {
+						type: 'image',
+						textToCopy: svgString,
+						mime: 'image/svg+xml',
+						filename: mermaidElement.id + '.svg',
+					});
+				}
+				return;
+			}
+
 			if (element && !element.getAttribute('data-resource-id')) element = element.parentElement;
 
 			if (element && element.getAttribute('data-resource-id')) {
@@ -624,6 +680,17 @@
 		}));
 		document.addEventListener('dragover', webviewLib.logEnabledEventHandler(e => {
 			e.preventDefault();
+		}));
+
+		document.addEventListener('click', webviewLib.logEnabledEventHandler(e => {
+			document.querySelectorAll('.media-pdf').forEach(element => {
+				if(!!element.contentWindow){
+					element.contentWindow.postMessage({
+						type: 'blur'
+					}, '*');
+				}
+			}
+			);
 		}));
 
 		let lastClientWidth_ = NaN, lastClientHeight_ = NaN, lastScrollTop_ = NaN;

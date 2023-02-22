@@ -1,7 +1,7 @@
 const React = require('react');
 const { connect } = require('react-redux');
 const { clipboard } = require('electron');
-const ExtensionBadge = require('./ExtensionBadge.min');
+import ExtensionBadge from './ExtensionBadge';
 import bridge from '../services/bridge';
 import { themeStyle } from '@joplin/lib/theme';
 import { _ } from '@joplin/lib/locale';
@@ -28,11 +28,11 @@ class ClipperConfigScreenComponent extends React.Component {
 	}
 
 	chromeButton_click() {
-		bridge().openExternal('https://chrome.google.com/webstore/detail/joplin-web-clipper/alofnhikmmkdbbbgpnglcpdollgjjfek');
+		void bridge().openExternal('https://chrome.google.com/webstore/detail/joplin-web-clipper/alofnhikmmkdbbbgpnglcpdollgjjfek');
 	}
 
 	firefoxButton_click() {
-		bridge().openExternal('https://addons.mozilla.org/en-US/firefox/addon/joplin-web-clipper/');
+		void bridge().openExternal('https://addons.mozilla.org/en-US/firefox/addon/joplin-web-clipper/');
 	}
 
 	copyToken_click() {
@@ -45,6 +45,7 @@ class ClipperConfigScreenComponent extends React.Component {
 		if (confirm(_('Are you sure you want to renew the authorisation token?'))) {
 			void EncryptionService.instance()
 				.generateApiToken()
+			// eslint-disable-next-line promise/prefer-await-to-then -- Old code before rule was applied
 				.then((token) => {
 					Setting.setValue('api.token', token);
 				});
@@ -56,7 +57,7 @@ class ClipperConfigScreenComponent extends React.Component {
 
 		const containerStyle = Object.assign({}, theme.containerStyle, {
 			overflowY: 'scroll',
-			padding: theme.configScreenPadding,
+			// padding: theme.configScreenPadding,
 			backgroundColor: theme.backgroundColor3,
 		});
 

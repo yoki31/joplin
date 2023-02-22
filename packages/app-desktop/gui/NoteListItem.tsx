@@ -73,6 +73,7 @@ function NoteListItem(props: NoteListItemProps, ref: any) {
 			focus: function() {
 				if (anchorRef.current) anchorRef.current.focus();
 			},
+			getHeight: () => anchorRef.current?.clientHeight,
 		};
 	});
 
@@ -110,7 +111,7 @@ function NoteListItem(props: NoteListItemProps, ref: any) {
 
 	let listItemTitleStyle = Object.assign({}, props.style.listItemTitle);
 	listItemTitleStyle.paddingLeft = !item.is_todo ? hPadding : 4;
-	if (item.is_shared) listItemTitleStyle.color = theme.colorWarn2;
+	if (item.is_shared) listItemTitleStyle.color = theme.colorWarn3;
 	if (item.is_todo && !!item.todo_completed) listItemTitleStyle = Object.assign(listItemTitleStyle, props.style.listItemTitleCompleted);
 
 	const displayTitle = Note.displayTitle(item);
@@ -126,13 +127,21 @@ function NoteListItem(props: NoteListItemProps, ref: any) {
 
 		mark.unmark();
 
-		for (let i = 0; i < props.highlightedWords.length; i++) {
-			const w = props.highlightedWords[i];
-
-			markJsUtils.markKeyword(mark, w, {
-				pregQuote: pregQuote,
-				replaceRegexDiacritics: replaceRegexDiacritics,
-			});
+		try {
+			for (const wordToBeHighlighted of props.highlightedWords) {
+				markJsUtils.markKeyword(mark, wordToBeHighlighted, {
+					pregQuote: pregQuote,
+					replaceRegexDiacritics: replaceRegexDiacritics,
+				});
+			}
+		} catch (error) {
+			if (error.name !== 'SyntaxError') {
+				throw error;
+			}
+			// An error of 'Regular expression too large' might occour in the markJs library
+			// when the input is really big, this catch is here to avoid the application crashing
+			// https://github.com/laurent22/joplin/issues/7634
+			console.error('Error while trying to highlight words from search: ', error);
 		}
 
 		// Note: in this case it is safe to use dangerouslySetInnerHTML because titleElement

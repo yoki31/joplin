@@ -80,7 +80,7 @@ const declarations: CommandDeclaration[] = [
 	},
 	{
 		name: 'insertDateTime',
-		label: () => _('Insert Date Time'),
+		label: () => _('Insert time'),
 		iconName: 'icon-add-date',
 	},
 	{
@@ -93,11 +93,11 @@ const declarations: CommandDeclaration[] = [
 	},
 	{
 		name: 'editor.undo',
-		label: () => _('Undo'),
+		label: () => _('Editor: %s', _('Undo')),
 	},
 	{
 		name: 'editor.redo',
-		label: () => _('Redo'),
+		label: () => _('Editor: %s', _('Redo')),
 	},
 	{
 		name: 'editor.indentLess',

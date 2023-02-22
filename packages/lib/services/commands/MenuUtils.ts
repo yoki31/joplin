@@ -6,13 +6,15 @@ import propsHaveChanged from './propsHaveChanged';
 const { createSelectorCreator, defaultMemoize } = require('reselect');
 const { createCachedSelector } = require('re-reselect');
 
-interface MenuItem {
-	id: string;
-	label: string;
-	click: Function;
+export interface MenuItem {
+	id?: string;
+	label?: string;
+	click?: Function;
 	role?: any;
+	type?: string;
 	accelerator?: string;
-	enabled: boolean;
+	checked?: boolean;
+	enabled?: boolean;
 }
 
 interface MenuItems {
@@ -97,8 +99,8 @@ export default class MenuUtils {
 		});
 	}
 
-	public commandsToMenuItems(commandNames: string[], onClick: Function): MenuItems {
-		const key: string = `${this.keymapService.lastSaveTime}_${commandNames.join('_')}`;
+	public commandsToMenuItems(commandNames: string[], onClick: Function, locale: string): MenuItems {
+		const key = `${this.keymapService.lastSaveTime}_${commandNames.join('_')}_${locale}`;
 		if (this.menuItemCache_[key]) return this.menuItemCache_[key];
 
 		const output: MenuItems = {};
@@ -107,7 +109,9 @@ export default class MenuUtils {
 			output[commandName] = this.commandToMenuItem(commandName, onClick);
 		}
 
-		this.menuItemCache_[key] = output;
+		this.menuItemCache_ = {
+			[key]: output,
+		};
 
 		return output;
 	}

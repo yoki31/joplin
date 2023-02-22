@@ -151,7 +151,7 @@ General classes
 
 body, button {
 	color: var(--joplin-color);
-	font-size: 16px;
+	font-size: 13px;
 }
 
 div, span, a {
@@ -159,7 +159,7 @@ div, span, a {
 }
 
 h2 {
-	font-size: 24px;
+	font-size: 20px;
 
 	&.-no-top-margin {
 		margin-top: 0;
@@ -180,6 +180,22 @@ h2 {
 	margin-bottom: 10px;
 }
 
+.form > .form-input-group-checkbox {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+}
+
+.form > .form-input-group-checkbox > input {
+	display: flex;
+	margin-right: 6px;
+}
+
+.form > .form-input-group-checkbox > label {
+	display: flex;
+	margin-bottom: 0;
+}
+
 .bold {
 	font-weight: bold;
 }
@@ -193,7 +209,7 @@ div.form,
 
 p {
 	&.-small {
-		font-size: 13px;
+		font-size: 11px;
 	}
 }
 
@@ -259,4 +275,5 @@ Component-specific classes
 
 .master-password-dialog .fa-times {
 	color: var(--joplin-color-error);
+	margin-left: 5px;
 }

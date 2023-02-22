@@ -1,10 +1,8 @@
 const { extractExecutablePath, quotePath, unquotePath, friendlySafeFilename, toFileProtocolPath } = require('./path-utils');
 
-describe('pathUtils', function() {
+describe('pathUtils', () => {
 
-	beforeEach(async (done) => {
-		done();
-	});
+
 
 	it('should create friendly safe filename', (async () => {
 		const testCases = [

@@ -12,6 +12,6 @@ module.exports = {
 	// '**/*.ts?(x)': () => 'npm run tsc',
 	'*.{js,jsx,ts,tsx}': [
 		'yarn run linter-precommit',
-		'git add',
+		'yarn run checkLibPaths',
 	],
 };

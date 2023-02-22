@@ -8,7 +8,10 @@ const { _ } = require('@joplin/lib/locale');
 import shim from '@joplin/lib/shim';
 import Setting from '@joplin/lib/models/Setting';
 
-Icon.loadFont();
+// We need this to suppress the useless warning
+// https://github.com/oblador/react-native-vector-icons/issues/1465
+// eslint-disable-next-line no-console
+Icon.loadFont().catch((error: any) => { console.info(error); });
 
 class CameraView extends Component {
 	constructor() {
@@ -210,7 +213,7 @@ class CameraView extends Component {
 						<View style={{ flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'flex-end' }}>
 							<View style={{ flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: 20 }}>
 								{ reverseCameraButton }
-								<TouchableOpacity onPress={this.photo_onPress}>
+								<TouchableOpacity onPress={this.photo_onPress} disabled={this.state.snapping}>
 									<View style={{ flexDirection: 'row', borderRadius: 90, width: 90, height: 90, backgroundColor: '#ffffffaa', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
 										<Icon
 											name={photoIcon}

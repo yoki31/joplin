@@ -11,7 +11,7 @@ import { databaseSchema } from './services/database/types';
 //
 // In our case, all bigInteger are timestamps, which JavaScript can handle
 // fine as numbers.
-require('pg').types.setTypeParser(20, function(val: any) {
+require('pg').types.setTypeParser(20, (val: any) => {
 	return parseInt(val, 10);
 });
 
@@ -45,10 +45,12 @@ export interface DbConfigConnection {
 	database?: string;
 	filename?: string;
 	password?: string;
+	connectionString?: string;
 }
 
 export interface QueryContext {
 	uniqueConstraintErrorLoggingDisabled?: boolean;
+	noSuchTableErrorLoggingDisabled?: boolean;
 }
 
 export interface KnexDatabaseConfig {
@@ -76,11 +78,15 @@ export function makeKnexConfig(dbConfig: DatabaseConfig): KnexDatabaseConfig {
 	if (dbConfig.client === 'sqlite3') {
 		connection.filename = dbConfig.name;
 	} else {
-		connection.database = dbConfig.name;
-		connection.host = dbConfig.host;
-		connection.port = dbConfig.port;
-		connection.user = dbConfig.user;
-		connection.password = dbConfig.password;
+		if (dbConfig.connectionString) {
+			connection.connectionString = dbConfig.connectionString;
+		} else {
+			connection.database = dbConfig.name;
+			connection.host = dbConfig.host;
+			connection.port = dbConfig.port;
+			connection.user = dbConfig.user;
+			connection.password = dbConfig.password;
+		}
 	}
 
 	return {
@@ -227,6 +233,10 @@ export async function connectDb(dbConfig: DatabaseConfig): Promise<DbConnection>
 			if (data.queryContext.uniqueConstraintErrorLoggingDisabled && isUniqueConstraintError(response)) {
 				return;
 			}
+
+			if (data.queryContext.noSuchTableErrorLoggingDisabled && isNoSuchTableError(response)) {
+				return;
+			}
 		}
 
 		const msg: string[] = [];
@@ -290,10 +300,14 @@ export async function migrateList(db: DbConnection, asString: boolean = true) {
 	//   ]
 	// ]
 
-	const formatName = (migrationInfo: any) => {
-		const name = migrationInfo.file ? migrationInfo.file : migrationInfo;
+	const getMigrationName = (migrationInfo: any) => {
+		if (migrationInfo && migrationInfo.name) return migrationInfo.name;
+		if (migrationInfo && migrationInfo.file) return migrationInfo.file;
+		return migrationInfo;
+	};
 
-		const s = name.split('.');
+	const formatName = (migrationInfo: any) => {
+		const s = getMigrationName(migrationInfo).split('.');
 		s.pop();
 		return s.join('.');
 	};
@@ -392,7 +406,8 @@ export function isUniqueConstraintError(error: any): boolean {
 
 export async function latestMigration(db: DbConnection): Promise<Migration | null> {
 	try {
-		const result = await db('knex_migrations').select('name').orderBy('id', 'desc').first();
+		const context: QueryContext = { noSuchTableErrorLoggingDisabled: true };
+		const result = await db('knex_migrations').queryContext(context).select('name').orderBy('id', 'desc').first();
 		return { name: result.name, done: true };
 	} catch (error) {
 		// If the database has never been initialized, we return null, so

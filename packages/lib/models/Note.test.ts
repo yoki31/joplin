@@ -9,7 +9,8 @@ import Tag from './Tag';
 import ItemChange from './ItemChange';
 import Resource from './Resource';
 import { ResourceEntity } from '../services/database/types';
-const ArrayUtils = require('../ArrayUtils.js');
+import { toForwardSlashes } from '../path-utils';
+import * as ArrayUtils from '../ArrayUtils';
 
 async function allItems() {
 	const folders = await Folder.all();
@@ -17,11 +18,10 @@ async function allItems() {
 	return folders.concat(notes);
 }
 
-describe('models/Note', function() {
-	beforeEach(async (done) => {
+describe('models/Note', () => {
+	beforeEach(async () => {
 		await setupDatabaseAndSynchronizer(1);
 		await switchClient(1);
-		done();
 	});
 
 	it('should find resource and note IDs', (async () => {
@@ -60,8 +60,8 @@ describe('models/Note', function() {
 			const t = testCases[i];
 
 			const input = t[0] as string;
-			const expected = t[1];
-			const actual = Note.linkedItemIds(input);
+			const expected = t[1] as string[];
+			const actual = Note.linkedItemIds(input) as string[];
 			const contentEquals = ArrayUtils.contentEquals(actual, expected);
 
 			// console.info(contentEquals, input, expected, actual);
@@ -153,7 +153,7 @@ describe('models/Note', function() {
 		const resource = (await Resource.all())[0];
 		expect((await Resource.all()).length).toBe(1);
 
-		const duplicatedNote = await Note.duplicate(note.id);
+		const duplicatedNote = await Note.duplicate(note.id, { duplicateResources: true });
 
 		const resources: ResourceEntity[] = await Resource.all();
 		expect(resources.length).toBe(2);
@@ -259,7 +259,8 @@ describe('models/Note', function() {
 		const t1 = r1.updated_time;
 		const t2 = r2.updated_time;
 
-		const resourceDirE = markdownUtils.escapeLinkUrl(resourceDir);
+		const resourceDirE = markdownUtils.escapeLinkUrl(toForwardSlashes(resourceDir));
+		const fileProtocol = `file://${process.platform === 'win32' ? '/' : ''}`;
 
 		const testCases = [
 			[
@@ -285,17 +286,17 @@ describe('models/Note', function() {
 			[
 				true,
 				`![](:/${r1.id})`,
-				`![](file://${resourceDirE}/${r1.id}.jpg?t=${t1})`,
+				`![](${fileProtocol}${resourceDirE}/${r1.id}.jpg?t=${t1})`,
 			],
 			[
 				true,
 				`![](:/${r1.id}) ![](:/${r1.id}) ![](:/${r2.id})`,
-				`![](file://${resourceDirE}/${r1.id}.jpg?t=${t1}) ![](file://${resourceDirE}/${r1.id}.jpg?t=${t1}) ![](file://${resourceDirE}/${r2.id}.jpg?t=${t2})`,
+				`![](${fileProtocol}${resourceDirE}/${r1.id}.jpg?t=${t1}) ![](${fileProtocol}${resourceDirE}/${r1.id}.jpg?t=${t1}) ![](${fileProtocol}${resourceDirE}/${r2.id}.jpg?t=${t2})`,
 			],
 			[
 				true,
 				`![](:/${r3.id})`,
-				`![](file://${resourceDirE}/${r3.id}.pdf)`,
+				`![](${fileProtocol}${resourceDirE}/${r3.id}.pdf)`,
 			],
 		];
 
@@ -408,4 +409,38 @@ describe('models/Note', function() {
 		expect(movedNote.conflict_original_id).toBe('');
 	}));
 
+});
+
+describe('models/Note_replacePaths', () => {
+
+	function testResourceReplacment(body: string, pathsToTry: string[], expected: string) {
+		expect(Note['replaceResourceExternalToInternalLinks_'](pathsToTry, body)).toBe(expected);
+	}
+	test('Basic replacement', () => {
+		const body = '![image.png](file:///C:Users/Username/resources/849eae4dade045298c107fc706b6d2bc.png?t=1655192326803)';
+		const pathsToTry = ['file:///C:Users/Username/resources'];
+		const expected = '![image.png](:/849eae4dade045298c107fc706b6d2bc)';
+		testResourceReplacment(body, pathsToTry, expected);
+	});
+
+	test('Replacement with spaces', () => {
+		const body = '![image.png](file:///C:Users/Username%20with%20spaces/resources/849eae4dade045298c107fc706b6d2bc.png?t=1655192326803)';
+		const pathsToTry = ['file:///C:Users/Username with spaces/resources'];
+		const expected = '![image.png](:/849eae4dade045298c107fc706b6d2bc)';
+		testResourceReplacment(body, pathsToTry, expected);
+	});
+
+	test('Replacement with Non-ASCII', () => {
+		const body = '![image.png](file:///C:Users/UsernameWith%C3%A9%C3%A0%C3%B6/resources/849eae4dade045298c107fc706b6d2bc.png?t=1655192326803)';
+		const pathsToTry = ['file:///C:Users/UsernameWithéàö/resources'];
+		const expected = '![image.png](:/849eae4dade045298c107fc706b6d2bc)';
+		testResourceReplacment(body, pathsToTry, expected);
+	});
+
+	test('Replacement with Non-ASCII and spaces', () => {
+		const body = '![image.png](file:///C:Users/Username%20With%20%C3%A9%C3%A0%C3%B6/resources/849eae4dade045298c107fc706b6d2bc.png?t=1655192326803)';
+		const pathsToTry = ['file:///C:Users/Username With éàö/resources'];
+		const expected = '![image.png](:/849eae4dade045298c107fc706b6d2bc)';
+		testResourceReplacment(body, pathsToTry, expected);
+	});
 });

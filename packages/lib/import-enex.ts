@@ -53,7 +53,7 @@ async function decodeBase64File(sourceFilePath: string, destFilePath: string) {
 	// would be ignored. I don't think it's happening anymore, but something to keep in mind
 	// anyway.
 
-	return new Promise(function(resolve, reject) {
+	return new Promise((resolve, reject) => {
 		// Note: we manually handle closing the file so that we can
 		// force flusing it before close. This is needed because
 		// "end" might be called before the file has been flushed
@@ -79,19 +79,6 @@ async function decodeBase64File(sourceFilePath: string, destFilePath: string) {
 
 		sourceStream.on('error', (error: any) => reject(error));
 		destStream.on('error', (error: any) => reject(error));
-	});
-}
-
-async function md5FileAsync(filePath: string): Promise<string> {
-	return new Promise((resolve, reject) => {
-		md5File(filePath, (error: any, hash: string) => {
-			if (error) {
-				reject(error);
-				return;
-			}
-
-			resolve(hash);
-		});
 	});
 }
 
@@ -169,7 +156,7 @@ async function processNoteResource(resource: ExtractedResource) {
 		resource.dataFilePath = `${Setting.value('tempDir')}/${resource.id}.empty`;
 		await fs.writeFile(resource.dataFilePath, '');
 	} else {
-		if (resource.dataEncoding == 'base64') {
+		if (resource.dataEncoding === 'base64') {
 			const decodedFilePath = `${resource.dataFilePath}.decoded`;
 			await decodeBase64File(resource.dataFilePath, decodedFilePath);
 			resource.dataFilePath = decodedFilePath;
@@ -184,7 +171,7 @@ async function processNoteResource(resource: ExtractedResource) {
 			// If no resource ID is present, the resource ID is actually the MD5 of the data.
 			// This ID will match the "hash" attribute of the corresponding <en-media> tag.
 			// resourceId = md5(decodedData);
-			resource.id = await md5FileAsync(resource.dataFilePath);
+			resource.id = await md5File(resource.dataFilePath);
 		}
 
 		if (!resource.id || !resource.size) {
@@ -505,7 +492,7 @@ export default async function importEnex(parentFolderId: string, filePath: strin
 			} else if (noteResourceAttributes) {
 				noteResourceAttributes[n] = text;
 			} else if (noteResource) {
-				if (n == 'data') {
+				if (n === 'data') {
 					if (!noteResource.dataEncoding) {
 						const attr = currentNodeAttributes();
 						noteResource.dataEncoding = attr.encoding;
@@ -523,17 +510,17 @@ export default async function importEnex(parentFolderId: string, filePath: strin
 					(noteResource as any)[n] += text;
 				}
 			} else if (note) {
-				if (n == 'title') {
+				if (n === 'title') {
 					note.title = text;
-				} else if (n == 'created') {
+				} else if (n === 'created') {
 					note.created_time = dateToTimestamp(text, 0);
-				} else if (n == 'updated') {
+				} else if (n === 'updated') {
 					note.updated_time = dateToTimestamp(text, 0);
-				} else if (n == 'tag') {
+				} else if (n === 'tag') {
 					note.tags.push(text);
-				} else if (n == 'note') {
+				} else if (n === 'note') {
 					// Ignore - white space between the opening tag <note> and the first sub-tag
-				} else if (n == 'content') {
+				} else if (n === 'content') {
 					// Ignore - white space between the opening tag <content> and the <![CDATA[< block where the content actually is
 				} else {
 					console.warn(createErrorWithNoteTitle(this, new Error(`Unsupported note tag: ${n}`)));
@@ -541,36 +528,36 @@ export default async function importEnex(parentFolderId: string, filePath: strin
 			}
 		}));
 
-		saxStream.on('opentag', handleSaxStreamEvent(function(node: Node) {
+		saxStream.on('opentag', handleSaxStreamEvent((node: Node) => {
 			const n = node.name.toLowerCase();
 			nodes.push(node);
 
-			if (n == 'note') {
+			if (n === 'note') {
 				note = {
 					resources: [],
 					tags: [],
 					bodyXml: '',
 				};
-			} else if (n == 'resource-attributes') {
+			} else if (n === 'resource-attributes') {
 				noteResourceAttributes = {};
-			} else if (n == 'recognition') {
+			} else if (n === 'recognition') {
 				if (noteResource) noteResourceRecognition = {};
-			} else if (n == 'note-attributes') {
+			} else if (n === 'note-attributes') {
 				noteAttributes = {};
-			} else if (n == 'resource') {
+			} else if (n === 'resource') {
 				noteResource = {
 					hasData: false,
 				};
 			}
 		}));
 
-		saxStream.on('cdata', handleSaxStreamEvent(function(data: any) {
+		saxStream.on('cdata', handleSaxStreamEvent((data: any) => {
 			const n = currentNodeName();
 
 			if (noteResourceRecognition) {
 				noteResourceRecognition.objID = extractRecognitionObjId(data);
 			} else if (note) {
-				if (n == 'content') {
+				if (n === 'content') {
 					note.bodyXml += data;
 				}
 			}
@@ -579,7 +566,7 @@ export default async function importEnex(parentFolderId: string, filePath: strin
 		saxStream.on('closetag', handleSaxStreamEvent(function(n: string) {
 			nodes.pop();
 
-			if (n == 'note') {
+			if (n === 'note') {
 				note = removeUndefinedProperties(note);
 
 				progressState.loaded++;
@@ -588,19 +575,20 @@ export default async function importEnex(parentFolderId: string, filePath: strin
 				notes.push(note);
 
 				if (notes.length >= 10) {
+					// eslint-disable-next-line promise/prefer-await-to-then -- Old code before rule was applied
 					processNotes().catch(error => {
 						importOptions.onError(createErrorWithNoteTitle(this, error));
 					});
 				}
 				note = null;
-			} else if (n == 'recognition' && noteResource) {
+			} else if (n === 'recognition' && noteResource) {
 				noteResource.id = noteResourceRecognition.objID;
 				noteResourceRecognition = null;
-			} else if (n == 'resource-attributes') {
+			} else if (n === 'resource-attributes') {
 				noteResource.filename = noteResourceAttributes['file-name'];
 				if (noteResourceAttributes['source-url']) noteResource.sourceUrl = noteResourceAttributes['source-url'];
 				noteResourceAttributes = null;
-			} else if (n == 'note-attributes') {
+			} else if (n === 'note-attributes') {
 				note.latitude = noteAttributes.latitude;
 				note.longitude = noteAttributes.longitude;
 				note.altitude = noteAttributes.altitude;
@@ -613,7 +601,7 @@ export default async function importEnex(parentFolderId: string, filePath: strin
 				note.source_url = noteAttributes['source-url'] ? noteAttributes['source-url'].trim() : '';
 
 				noteAttributes = null;
-			} else if (n == 'resource') {
+			} else if (n === 'resource') {
 				let mimeType = noteResource.mime ? noteResource.mime.trim() : '';
 
 				// Evernote sometimes gives an invalid or generic
@@ -645,9 +633,10 @@ export default async function importEnex(parentFolderId: string, filePath: strin
 			}
 		}));
 
-		saxStream.on('end', handleSaxStreamEvent(function() {
+		saxStream.on('end', handleSaxStreamEvent(() => {
 			// Wait till there is no more notes to process.
 			const iid = shim.setInterval(() => {
+				// eslint-disable-next-line promise/prefer-await-to-then -- Old code before rule was applied
 				void processNotes().then(allDone => {
 					if (allDone) {
 						shim.clearTimeout(iid);

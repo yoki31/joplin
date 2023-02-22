@@ -11,15 +11,14 @@ import { NoteEntity, ResourceEntity } from '../database/types.js';
 import InteropService from './InteropService.js';
 import { fileExtension } from '../../path-utils.js';
 
-describe('interop/InteropService_Exporter_Md', function() {
+describe('interop/InteropService_Exporter_Md', () => {
 
-	beforeEach(async (done) => {
+	beforeEach(async () => {
 		await setupDatabaseAndSynchronizer(1);
 		await switchClient(1);
 
 		await fs.remove(exportDir());
 		await fs.mkdirp(exportDir());
-		done();
 	});
 
 	it('should create resources directory', (async () => {
@@ -445,6 +444,24 @@ describe('interop/InteropService_Exporter_Md', function() {
 
 		const resourceFilename = (await fs.readdir(`${exportDir()}/_resources`))[0];
 		expect(fileExtension(resourceFilename)).toBe('jpg');
+	}));
+	it('should url encode resource links', (async () => {
+		const folder = await Folder.save({ title: 'testing' });
+		const note = await Note.save({ title: 'mynote', parent_id: folder.id });
+		await shim.attachFileToNote(note, `${supportDir}/photo.jpg`);
+
+		const resource: ResourceEntity = (await Resource.all())[0];
+		await Resource.save({ id: resource.id, title: 'name with spaces.jpg' });
+
+		const service = InteropService.instance();
+
+		await service.export({
+			path: exportDir(),
+			format: 'md',
+		});
+
+		const note_body = await shim.fsDriver().readFile(`${exportDir()}/testing/mynote.md`);
+		expect(note_body).toContain('[photo.jpg](../_resources/name%20with%20spaces.jpg)');
 	}));
 
 });

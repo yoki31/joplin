@@ -11,6 +11,7 @@ function createConsoleWrapper(pluginId: string) {
 	const wrapper: any = {};
 
 	for (const n in console) {
+		// eslint-disable-next-line no-console
 		if (!console.hasOwnProperty(n)) continue;
 		wrapper[n] = (...args: any[]) => {
 			const newArgs = args.slice();
@@ -50,6 +51,7 @@ export default class PluginRunner extends BasePluginRunner {
 			const callId = `${pluginId}::${path}::${uuid.createNano()}`;
 			this.activeSandboxCalls_[callId] = true;
 			const promise = executeSandboxCall(pluginId, sandbox, `joplin.${path}`, mapEventHandlersToIds(args, this.eventHandlers_), this.eventHandler);
+			// eslint-disable-next-line promise/prefer-await-to-then -- Old code before rule was applied
 			promise.finally(() => {
 				delete this.activeSandboxCalls_[callId];
 			});

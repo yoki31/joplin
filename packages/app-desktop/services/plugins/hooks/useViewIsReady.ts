@@ -9,9 +9,11 @@ export default function useViewIsReady(viewRef: any) {
 	const [iframeContentReady, setIFrameContentReady] = useState(false);
 
 	useEffect(() => {
+		// eslint-disable-next-line no-console
 		console.debug('useViewIsReady ============== Setup Listeners');
 
 		function onIFrameReady() {
+			// eslint-disable-next-line no-console
 			console.debug('useViewIsReady: onIFrameReady');
 			setIFrameReady(true);
 		}
@@ -21,6 +23,7 @@ export default function useViewIsReady(viewRef: any) {
 
 			if (!data || data.target !== 'UserWebview') return;
 
+			// eslint-disable-next-line no-console
 			console.debug('useViewIsReady: message', data);
 
 			if (data.message === 'ready') {
@@ -30,6 +33,7 @@ export default function useViewIsReady(viewRef: any) {
 
 		const iframeDocument = viewRef.current.contentWindow.document;
 
+		// eslint-disable-next-line no-console
 		console.debug('useViewIsReady readyState', iframeDocument.readyState);
 
 		if (iframeDocument.readyState === 'complete') {
@@ -41,10 +45,14 @@ export default function useViewIsReady(viewRef: any) {
 		viewRef.current.contentWindow.addEventListener('message', onMessage);
 
 		return () => {
-			viewRef.current.removeEventListener('dom-ready', onIFrameReady);
-			viewRef.current.removeEventListener('load', onIFrameReady);
-			viewRef.current.contentWindow.removeEventListener('message', onMessage);
+			if (viewRef.current) {
+				viewRef.current.removeEventListener('dom-ready', onIFrameReady);
+				viewRef.current.removeEventListener('load', onIFrameReady);
+				// eslint-disable-next-line @seiyab/react-hooks/exhaustive-deps -- Old code before rule was applied
+				viewRef.current.contentWindow.removeEventListener('message', onMessage);
+			}
 		};
+		// eslint-disable-next-line @seiyab/react-hooks/exhaustive-deps -- Old code before rule was applied
 	}, []);
 
 	return iframeReady && iframeContentReady;

@@ -24,7 +24,6 @@ import ExternalEditWatcher from '@joplin/lib/services/ExternalEditWatcher';
 import appReducer, { createAppDefaultState } from './app.reducer';
 const { FoldersScreenUtils } = require('@joplin/lib/folders-screen-utils.js');
 import Folder from '@joplin/lib/models/Folder';
-const fs = require('fs-extra');
 import Tag from '@joplin/lib/models/Tag';
 import { reg } from '@joplin/lib/registry';
 const packageInfo = require('./packageInfo.js');
@@ -44,6 +43,7 @@ import sidebarCommands from './gui/Sidebar/commands/index';
 import appCommands from './commands/index';
 import libCommands from '@joplin/lib/commands/index';
 import { homedir } from 'os';
+import getDefaultPluginsInfo from '@joplin/lib/services/plugins/defaultPlugins/desktopDefaultPluginsInfo';
 const electronContextMenu = require('./services/electron-context-menu');
 // import  populateDatabase from '@joplin/lib/services/debug/populateDatabase';
 
@@ -63,6 +63,9 @@ import ShareService from '@joplin/lib/services/share/ShareService';
 import checkForUpdates from './checkForUpdates';
 import { AppState } from './app.reducer';
 import syncDebugLog from '@joplin/lib/services/synchronizer/syncDebugLog';
+import eventManager from '@joplin/lib/eventManager';
+import path = require('path');
+import { checkPreInstalledDefaultPlugins, installDefaultPlugins, setSettingsForDefaultPlugins } from '@joplin/lib/services/plugins/defaultPlugins/defaultPluginsUtils';
 // import { runIntegrationTests } from '@joplin/lib/services/e2ee/ppkTestUtils';
 
 const pluginClasses = [
@@ -104,22 +107,22 @@ class Application extends BaseApplication {
 	}
 
 	protected async generalMiddleware(store: any, next: any, action: any) {
-		if (action.type == 'SETTING_UPDATE_ONE' && action.key == 'locale' || action.type == 'SETTING_UPDATE_ALL') {
+		if (action.type === 'SETTING_UPDATE_ONE' && action.key === 'locale' || action.type === 'SETTING_UPDATE_ALL') {
 			setLocale(Setting.value('locale'));
 			// The bridge runs within the main process, with its own instance of locale.js
 			// so it needs to be set too here.
 			bridge().setLocale(Setting.value('locale'));
 		}
 
-		if (action.type == 'SETTING_UPDATE_ONE' && action.key == 'showTrayIcon' || action.type == 'SETTING_UPDATE_ALL') {
+		if (action.type === 'SETTING_UPDATE_ONE' && action.key === 'showTrayIcon' || action.type === 'SETTING_UPDATE_ALL') {
 			this.updateTray();
 		}
 
-		if (action.type == 'SETTING_UPDATE_ONE' && action.key == 'style.editor.fontFamily' || action.type == 'SETTING_UPDATE_ALL') {
+		if (action.type === 'SETTING_UPDATE_ONE' && action.key === 'style.editor.fontFamily' || action.type === 'SETTING_UPDATE_ALL') {
 			this.updateEditorFont();
 		}
 
-		if (action.type == 'SETTING_UPDATE_ONE' && action.key == 'windowContentZoomFactor' || action.type == 'SETTING_UPDATE_ALL') {
+		if (action.type === 'SETTING_UPDATE_ONE' && action.key === 'windowContentZoomFactor' || action.type === 'SETTING_UPDATE_ALL') {
 			webFrame.setZoomFactor(Setting.value('windowContentZoomFactor') / 100);
 		}
 
@@ -142,7 +145,7 @@ class Application extends BaseApplication {
 			await Folder.expandTree(newState.folders, action.folderId);
 		}
 
-		if (this.hasGui() && ((action.type == 'SETTING_UPDATE_ONE' && ['themeAutoDetect', 'theme', 'preferredLightTheme', 'preferredDarkTheme'].includes(action.key)) || action.type == 'SETTING_UPDATE_ALL')) {
+		if (this.hasGui() && ((action.type === 'SETTING_UPDATE_ONE' && ['themeAutoDetect', 'theme', 'preferredLightTheme', 'preferredDarkTheme'].includes(action.key)) || action.type === 'SETTING_UPDATE_ALL')) {
 			this.handleThemeAutoDetect();
 		}
 
@@ -234,23 +237,6 @@ class Application extends BaseApplication {
 		});
 	}
 
-	async loadCustomCss(filePath: string) {
-		let cssString = '';
-		if (await fs.pathExists(filePath)) {
-			try {
-				cssString = await fs.readFile(filePath, 'utf-8');
-
-			} catch (error) {
-				let msg = error.message ? error.message : '';
-				msg = `Could not load custom css from ${filePath}\n${msg}`;
-				error.message = msg;
-				throw error;
-			}
-		}
-
-		return cssString;
-	}
-
 	private async checkForLegacyTemplates() {
 		const templatesDir = `${Setting.value('profileDir')}/templates`;
 		if (await shim.fsDriver().exists(templatesDir)) {
@@ -258,7 +244,7 @@ class Application extends BaseApplication {
 				const files = await shim.fsDriver().readDirStats(templatesDir);
 				for (const file of files) {
 					if (file.path.endsWith('.md')) {
-						// There is atleast one template.
+						// There is at least one template.
 						this.store().dispatch({
 							type: 'CONTAINS_LEGACY_TEMPLATES',
 						});
@@ -277,9 +263,9 @@ class Application extends BaseApplication {
 		const pluginRunner = new PluginRunner();
 		service.initialize(packageInfo.version, PlatformImplementation.instance(), pluginRunner, this.store());
 		service.isSafeMode = Setting.value('isSafeMode');
+		const defaultPluginsId = Object.keys(getDefaultPluginsInfo());
 
-		const pluginSettings = service.unserializePluginSettings(Setting.value('plugins.states'));
-
+		let pluginSettings = service.unserializePluginSettings(Setting.value('plugins.states'));
 		{
 			// Users can add and remove plugins from the config screen at any
 			// time, however we only effectively uninstall the plugin the next
@@ -289,7 +275,11 @@ class Application extends BaseApplication {
 			Setting.setValue('plugins.states', newSettings);
 		}
 
+		checkPreInstalledDefaultPlugins(defaultPluginsId, pluginSettings);
+
 		try {
+			const defaultPluginsDir = path.join(bridge().buildDir(), 'defaultPlugins');
+			pluginSettings = await installDefaultPlugins(service, defaultPluginsDir, defaultPluginsId, pluginSettings);
 			if (await shim.fsDriver().exists(Setting.value('pluginDir'))) {
 				await service.loadAndRunPlugins(Setting.value('pluginDir'), pluginSettings);
 			}
@@ -337,8 +327,21 @@ class Application extends BaseApplication {
 					type: 'STARTUP_PLUGINS_LOADED',
 					value: true,
 				});
+				setSettingsForDefaultPlugins(getDefaultPluginsInfo());
 			}
 		}, 500);
+	}
+
+	public crashDetectionHandler() {
+		// This handler conflicts with the single instance behaviour, so it's
+		// not used for now.
+		// https://discourse.joplinapp.org/t/pre-release-v2-8-is-now-available-updated-27-april/25158/56?u=laurent
+		if (!Setting.value('wasClosedSuccessfully')) {
+			const answer = confirm(_('The application did not close properly. Would you like to start in safe mode?'));
+			Setting.setValue('isSafeMode', !!answer);
+		}
+
+		Setting.setValue('wasClosedSuccessfully', false);
 	}
 
 	public async start(argv: string[]): Promise<any> {
@@ -347,6 +350,8 @@ class Application extends BaseApplication {
 		if (!bridge().electronIsDev()) argv.splice(1, 0, '.');
 
 		argv = await super.start(argv);
+
+		// this.crashDetectionHandler();
 
 		await this.applySettingsSideEffects();
 
@@ -371,8 +376,7 @@ class Application extends BaseApplication {
 		}
 
 		// Loads app-wide styles. (Markdown preview-specific styles loaded in app.js)
-		const filename = Setting.custom_css_files.JOPLIN_APP;
-		await injectCustomStyles('appStyles', `${dir}/${filename}`);
+		await injectCustomStyles('appStyles', Setting.customCssFilePath(Setting.customCssFilenames.JOPLIN_APP));
 
 		AlarmService.setDriver(new AlarmServiceDriverNode({ appName: packageInfo.build.appId }));
 		AlarmService.setLogger(reg.logger());
@@ -391,7 +395,7 @@ class Application extends BaseApplication {
 
 		PerFolderSortOrderService.initialize();
 
-		CommandService.instance().initialize(this.store(), Setting.value('env') == 'dev', stateToWhenClauseContext);
+		CommandService.instance().initialize(this.store(), Setting.value('env') === 'dev', stateToWhenClauseContext);
 
 		for (const command of commands) {
 			CommandService.instance().registerDeclaration(command.declaration);
@@ -450,7 +454,7 @@ class Application extends BaseApplication {
 		});
 
 		// Loads custom Markdown preview styles
-		const cssString = await loadCustomCss(`${Setting.value('profileDir')}/userstyle.css`);
+		const cssString = await loadCustomCss(Setting.customCssFilePath(Setting.customCssFilenames.RENDERED_MARKDOWN));
 		this.store().dispatch({
 			type: 'CUSTOM_CSS_APPEND',
 			css: cssString,
@@ -463,8 +467,9 @@ class Application extends BaseApplication {
 
 		await this.checkForLegacyTemplates();
 
-		// Note: Auto-update currently doesn't work in Linux: it downloads the update
-		// but then doesn't install it on exit.
+		// Note: Auto-update is a misnomer in the code.
+		// The code below only checks, if a new version is available.
+		// We only allow Windows and macOS users to automatically check for updates
 		if (shim.isWindows() || shim.isMac()) {
 			const runAutoUpdateCheck = () => {
 				if (Setting.value('autoUpdateEnabled')) {
@@ -497,6 +502,7 @@ class Application extends BaseApplication {
 		if (Setting.value('env') === 'dev') {
 			void AlarmService.updateAllNotifications();
 		} else {
+			// eslint-disable-next-line promise/prefer-await-to-then -- Old code before rule was applied
 			void reg.scheduleSync(1000).then(() => {
 				// Wait for the first sync before updating the notifications, since synchronisation
 				// might change the notifications.
@@ -523,6 +529,12 @@ class Application extends BaseApplication {
 
 		ResourceEditWatcher.instance().initialize(reg.logger(), (action: any) => { this.store().dispatch(action); }, (path: string) => bridge().openItem(path));
 
+		// Forwards the local event to the global event manager, so that it can
+		// be picked up by the plugin manager.
+		ResourceEditWatcher.instance().on('resourceChange', (event: any) => {
+			eventManager.emit('resourceChange', event);
+		});
+
 		RevisionService.instance().runInBackground();
 
 		// Make it available to the console window - useful to call revisionService.collectRevisions()
@@ -532,8 +544,10 @@ class Application extends BaseApplication {
 				migrationService: MigrationService.instance(),
 				decryptionWorker: DecryptionWorker.instance(),
 				commandService: CommandService.instance(),
+				pluginService: PluginService.instance(),
 				bridge: bridge(),
 				debug: new DebugService(reg.db()),
+				resourceService: ResourceService.instance(),
 			};
 		}
 
@@ -545,7 +559,12 @@ class Application extends BaseApplication {
 
 		await SpellCheckerService.instance().initialize(new SpellCheckerServiceDriverNative());
 
-		// await populateDatabase(reg.db());
+		// await populateDatabase(reg.db(), {
+		// 	clearDatabase: true,
+		// 	folderCount: 1000,
+		// 	rootFolderCount: 1,
+		// 	subFolderDepth: 1,
+		// });
 
 		// setTimeout(() => {
 		// 	console.info(CommandService.instance().commandsToMarkdownTable(this.store().getState()));
@@ -564,10 +583,16 @@ class Application extends BaseApplication {
 		// setTimeout(() => {
 		// 	this.dispatch({
 		// 		type: 'DIALOG_OPEN',
-		// 		name: 'editFolder',
-		// 		props: { folderId: '3d90f7da26b947dc9c8c6c65e86cd231' },
+		// 		name: 'syncWizard',
 		// 	});
 		// }, 2000);
+
+		// setTimeout(() => {
+		// 	this.dispatch({
+		// 		type: 'DIALOG_OPEN',
+		// 		name: 'editFolder',
+		// 	});
+		// }, 3000);
 
 		// setTimeout(() => {
 		// 	this.dispatch({
@@ -578,22 +603,6 @@ class Application extends BaseApplication {
 		// 		},
 		// 	});
 		// }, 2000);
-
-
-
-
-		// const testData = {
-		// 	"publicKey": "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAmKpb4JiYiY16pGOabje7uMsFd7DcMnruGxJ9HSpOiOduj3ApKqRu0xWCkGyqpekyOjjooZ98wVkDPUFsyVjN+kG8yKFn2xXC5SeRyhIVbdytjYiGshr6x+T9XVI+HnJKQF3WbrcqSOejlDXJv6u7jKrLAlOT3tkqEb0ZefhcEIajq6kNkH51R0lwsFnzxDIK3MW1wNzmiOfM92f8PFxiOBmUtVIngGPlNgyld1FzKN7Ypz1uS6GOqAtRm325qyfE/+2Jgb7WaDFT7VB5pHnOiojj9+xi1DvQWCbbIYXoMi0XVi9i2ZQfM32aFwiHez5UL61IMWUcqQ0/gldh4HFlAQIDAQAB\n-----END PUBLIC KEY-----",
-		// 	"privateKey": "-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQEAmKpb4JiYiY16pGOabje7uMsFd7DcMnruGxJ9HSpOiOduj3ApKqRu0xWCkGyqpekyOjjooZ98wVkDPUFsyVjN+kG8yKFn2xXC5SeRyhIVbdytjYiGshr6x+T9XVI+HnJKQF3WbrcqSOejlDXJv6u7jKrLAlOT3tkqEb0ZefhcEIajq6kNkH51R0lwsFnzxDIK3MW1wNzmiOfM92f8PFxiOBmUtVIngGPlNgyld1FzKN7Ypz1uS6GOqAtRm325qyfE/+2Jgb7WaDFT7VB5pHnOiojj9+xi1DvQWCbbIYXoMi0XVi9i2ZQfM32aFwiHez5UL61IMWUcqQ0/gldh4HFlAQIDAQABAoIBADFFMffPZ9Nk7MLnPmz54cTnCPGzC63jDLuCAQ0LnWMDxiPW4AJaJUZMt+GioISBOWue+D1JOrsv3iLD3bcxyPBOjP33UYxcfpT0a1Ha+j2FriFygX4zxOIEnlyi8VdkLWCOqGj9BlGXKKzpmx4X76Sbbn9mt9+BGNm2vOUnaZcPTVuOI7K6xZynlzMRYSyhu7J0QdYVK44vZ/TjdD/4pgX+ezrGiwx7OCf/KctjvEoYtXYV2gkBOifOlqYOp0fMEC3mVAZfwpvDTbRchb7h0rxmxfKbWsjPtDblByXBLJZ3PGcKcmJlu4Qsfd2AgrY62r+DbNt3EhK072ZilYIfKD0CgYEAybcDbucr67dWMlFh5b79bvJugw6rj1V59Tp+RX9nKgzaiBUHLun6cK5hbgg9z3ejc2SWlX7D+eOyveVjhDlxUOCFURJLo2oPMRKwBBKJkOJhdtAjPzyceYI6Yj2lvtDeijcZfg8F9YqUTMfisDsEi1MbGnqawWwUerN9P5TjRBcCgYEAwcAfw8KTnQsvXPwWwh6Wabtz0bUAKzA/D6oWTR5IbkBfb3jNU8lmh9H66H0P18Nsa3vozA6buW2LDhHCFFkQ4PUTQVKok1qhAsvJBECxdwMqb5iAXk3Yk3qQYGhR23Zkp1u82wmpSaBLKGr+SL9/q5EamqiR3PQYx/aQTeIaFqcCgYAn/N/xXGKYl/++eeOuZ+5V0DmYQZBBGfDTbIUbweXxsBqiX4jNBBVhwTAPYBLgzhbZCVfQyxCOuVT10EOqMrkED35eVAIqoxvf3pSGOiaLUlV/+EMEhj9+1xI753y0FzQGsmWbV98WjiJYFkgaJ5j/BbqZxTRoo8RrjqmFsT5cgQKBgQCWTc4WlmbfSKMIloOtOf9jrMjvoWOtHXN+WmuMjfaQmR2wI13eJvqEWRA1tXdJ4c/FHk39p0OFOQbL9ljCYknmyhiS72XZUlBgE+kwhGNnuSv9gKftAKUH2+gO8j62awUwk8lRfxA2DsTfaQk1NGH9ncauviDR8QcccRmHYeTtNwKBgQCOvHiVaNw8XJIqt2r3j8pEJcr8LO+WNtLDU+h9NhM5a5NxfeRUlxdrqR0FXS4NkE6E3h9iLIRt2V+0bghzJMhKuwdjC0K6+jCb7ImV+Xcl9LNOQ1mPLBLS1jqdQnBS1ZPtcQpMrVi6dU9vVespylKEyGnQnUUtLgYrbO9OMrP1uQ==\n-----END RSA PRIVATE KEY-----",
-		// 	"plaintext": "just testing",
-		// 	"ciphertext": "LBicxglLvMyBin8uMpUnF5ARQ+KtAM563RViMepnOcyXa/NOJonNBixm+th+jX44\r\n/rie2ESbWg/FnlR4mHCEpTQJFXt12zpeXvtM8Hy1OQMud1B1Hc9hp1hhd1t6cuDz\r\n/Cs10n1+57V6zwHottYA6tn84cBn678SvPa/WTwgvb9lnBVZbesm3dVIr5uh2hk9\r\nNcVkmqyfi+ilkNQ3FIQfL+ciHvPFUIpljgIOipZhmufubdgMGW1HEUYlsmxLE7ce\r\ndpUQJoIbfKJ1x2dJRoeYsCjvcYFWdMUcg78HkXR+UcObP6zkK8cH33fb6PKKd8Z4\r\nToj4HROza8Dp7uCV5XyBTA=="
-		// };
-		// await checkTestData(testData);
-
-		// const testData = await createTestData();
-		// await checkTestData(testData);
-
-		// await printTestData();
 
 		// await runIntegrationTests();
 

@@ -7,14 +7,13 @@ import ItemChange from '../models/ItemChange';
 
 let searchEngine: SearchEngine = null;
 
-describe('models/ItemChange', function() {
+describe('models/ItemChange', () => {
 
-	beforeEach(async (done) => {
+	beforeEach(async () => {
 		await setupDatabaseAndSynchronizer(1);
 		await switchClient(1);
 		searchEngine = new SearchEngine();
 		searchEngine.setDb(db());
-		done();
 	});
 
 	it('should delete old changes that have been processed', (async () => {

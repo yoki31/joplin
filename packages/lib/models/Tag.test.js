@@ -3,12 +3,11 @@ const Folder = require('../models/Folder').default;
 const Note = require('../models/Note').default;
 const Tag = require('../models/Tag').default;
 
-describe('models/Tag', function() {
+describe('models/Tag', () => {
 
-	beforeEach(async (done) => {
+	beforeEach(async () => {
 		await setupDatabaseAndSynchronizer(1);
 		await switchClient(1);
-		done();
 	});
 
 	it('should add tags by title', (async () => {

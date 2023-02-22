@@ -81,7 +81,25 @@ class Logger {
 	}
 
 	public static get globalLogger(): Logger {
-		if (!this.globalLogger_) throw new Error('Global logger has not been initialized!!');
+		if (!this.globalLogger_) {
+			// The global logger normally is initialized early, so we shouldn't
+			// end up here. However due to early event handlers, it might happen
+			// and in this case we want to know about it. So we print this
+			// warning, and also flag the log statements using `[UNINITIALIZED
+			// GLOBAL LOGGER]` so that we know from where the incorrect log
+			// statement comes from.
+
+			console.warn('Logger: Trying to access globalLogger, but it has not been initialized. Make sure that initializeGlobalLogger() has been called before logging. Will use the console as fallback.');
+			const output: any = {
+				log: (level: LogLevel, prefix: string, ...object: any[]) => {
+					// eslint-disable-next-line no-console
+					console.info(`[UNINITIALIZED GLOBAL LOGGER] ${this.levelIdToString(level)}: ${prefix}:`, object);
+				},
+			};
+			return output;
+
+			// throw new Error('Global logger has not been initialized!!');
+		}
 		return this.globalLogger_;
 	}
 
@@ -168,7 +186,7 @@ class Logger {
 
 		for (let i = 0; i < this.targets_.length; i++) {
 			const target = this.targets_[i];
-			if (target.type == 'database') {
+			if (target.type === 'database') {
 				let sql = `SELECT * FROM logs WHERE level IN (${options.levels.join(',')}) ORDER BY timestamp DESC`;
 				if (limit !== null) sql += ` LIMIT ${limit}`;
 				return await target.database.selectAll(sql);
@@ -191,11 +209,11 @@ class Logger {
 
 			if (this.targetLevel(target) < level) continue;
 
-			if (target.type == 'console') {
+			if (target.type === 'console') {
 				let fn = 'log';
-				if (level == LogLevel.Error) fn = 'error';
-				if (level == LogLevel.Warn) fn = 'warn';
-				if (level == LogLevel.Info) fn = 'info';
+				if (level === LogLevel.Error) fn = 'error';
+				if (level === LogLevel.Warn) fn = 'warn';
+				if (level === LogLevel.Info) fn = 'info';
 				const consoleObj = target.console ? target.console : console;
 				let items: any[] = [];
 
@@ -217,7 +235,7 @@ class Logger {
 				}
 
 				consoleObj[fn](...items);
-			} else if (target.type == 'file') {
+			} else if (target.type === 'file') {
 				const timestamp = moment().format('YYYY-MM-DD HH:mm:ss');
 				const line = [timestamp];
 				if (targetPrefix) line.push(targetPrefix);
@@ -231,15 +249,18 @@ class Logger {
 				// when many log operations are being done (eg. during sync in
 				// dev mode).
 				let release: Function = null;
+				// eslint-disable-next-line promise/prefer-await-to-then -- Old code before rule was applied
 				writeToFileMutex_.acquire().then((r: Function) => {
 					release = r;
 					return Logger.fsDriver().appendFile(target.path, `${line.join(': ')}\n`, 'utf8');
+					// eslint-disable-next-line promise/prefer-await-to-then -- Old code before rule was applied
 				}).catch((error: any) => {
 					console.error('Cannot write to log file:', error);
+					// eslint-disable-next-line promise/prefer-await-to-then -- Old code before rule was applied
 				}).finally(() => {
 					if (release) release();
 				});
-			} else if (target.type == 'database') {
+			} else if (target.type === 'database') {
 				const msg = [];
 				if (targetPrefix) msg.push(targetPrefix);
 				msg.push(this.objectsToString(...object));
@@ -280,20 +301,20 @@ class Logger {
 	}
 
 	static levelStringToId(s: string) {
-		if (s == 'none') return LogLevel.None;
-		if (s == 'error') return LogLevel.Error;
-		if (s == 'warn') return LogLevel.Warn;
-		if (s == 'info') return LogLevel.Info;
-		if (s == 'debug') return LogLevel.Debug;
+		if (s === 'none') return LogLevel.None;
+		if (s === 'error') return LogLevel.Error;
+		if (s === 'warn') return LogLevel.Warn;
+		if (s === 'info') return LogLevel.Info;
+		if (s === 'debug') return LogLevel.Debug;
 		throw new Error(`Unknown log level: ${s}`);
 	}
 
 	static levelIdToString(id: LogLevel) {
-		if (id == LogLevel.None) return 'none';
-		if (id == LogLevel.Error) return 'error';
-		if (id == LogLevel.Warn) return 'warn';
-		if (id == LogLevel.Info) return 'info';
-		if (id == LogLevel.Debug) return 'debug';
+		if (id === LogLevel.None) return 'none';
+		if (id === LogLevel.Error) return 'error';
+		if (id === LogLevel.Warn) return 'warn';
+		if (id === LogLevel.Info) return 'info';
+		if (id === LogLevel.Debug) return 'debug';
 		throw new Error(`Unknown level ID: ${id}`);
 	}
 

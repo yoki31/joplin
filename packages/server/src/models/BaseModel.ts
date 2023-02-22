@@ -5,10 +5,13 @@ import uuidgen from '../utils/uuidgen';
 import { ErrorUnprocessableEntity, ErrorBadRequest } from '../utils/errors';
 import { Models, NewModelFactoryHandler } from './factory';
 import * as EventEmitter from 'events';
-import { Config } from '../utils/types';
+import { Config, Env } from '../utils/types';
 import personalizedUserContentBaseUrl from '@joplin/lib/services/joplinServer/personalizedUserContentBaseUrl';
 import Logger from '@joplin/lib/Logger';
 import dbuuid from '../utils/dbuuid';
+import { defaultPagination, PaginatedResults, Pagination } from './utils/pagination';
+import { Knex } from 'knex';
+import { unique } from '../utils/array';
 
 const logger = Logger.create('BaseModel');
 
@@ -29,6 +32,10 @@ export interface SaveOptions {
 
 export interface LoadOptions {
 	fields?: string[];
+}
+
+export interface AllPaginatedOptions extends LoadOptions {
+	queryCallback?: (query: Knex.QueryBuilder)=> Knex.QueryBuilder;
 }
 
 export interface DeleteOptions {
@@ -81,6 +88,10 @@ export default abstract class BaseModel<T> {
 
 	protected get userContentBaseUrl(): string {
 		return this.config_.userContentBaseUrl;
+	}
+
+	protected get env(): Env {
+		return this.config_.env;
 	}
 
 	protected personalizedUserContentBaseUrl(userId: Uuid): string {
@@ -164,6 +175,10 @@ export default abstract class BaseModel<T> {
 		return true;
 	}
 
+	protected hasUpdatedTime(): boolean {
+		return this.autoTimestampEnabled();
+	}
+
 	protected get hasParentId(): boolean {
 		return false;
 	}
@@ -205,6 +220,7 @@ export default abstract class BaseModel<T> {
 
 		txIndex = await this.transactionHandler_.start(name);
 
+		// eslint-disable-next-line no-console
 		if (debugSteps) console.info('START', name, txIndex);
 
 		let output: T = null;
@@ -212,6 +228,7 @@ export default abstract class BaseModel<T> {
 		try {
 			output = await fn();
 		} catch (error) {
+			// eslint-disable-next-line no-console
 			if (debugSteps) console.info('ROLLBACK', name, txIndex);
 
 			await this.transactionHandler_.rollback(txIndex);
@@ -221,6 +238,7 @@ export default abstract class BaseModel<T> {
 			if (debugTimerId) clearTimeout(debugTimerId);
 		}
 
+		// eslint-disable-next-line no-console
 		if (debugSteps) console.info('COMMIT', name, txIndex);
 
 		await this.transactionHandler_.commit(txIndex);
@@ -230,6 +248,34 @@ export default abstract class BaseModel<T> {
 	public async all(options: LoadOptions = {}): Promise<T[]> {
 		const rows: any[] = await this.db(this.tableName).select(this.selectFields(options));
 		return rows as T[];
+	}
+
+	public async allPaginated(pagination: Pagination, options: AllPaginatedOptions = {}): Promise<PaginatedResults<T>> {
+		pagination = {
+			...defaultPagination(),
+			...pagination,
+		};
+
+		const itemCount = await this.count();
+
+		let query = this
+			.db(this.tableName)
+			.select(this.selectFields(options));
+
+		if (options.queryCallback) query = options.queryCallback(query);
+
+		void query
+			.orderBy(pagination.order[0].by, pagination.order[0].dir)
+			.offset((pagination.page - 1) * pagination.limit)
+			.limit(pagination.limit);
+
+		const items = (await query) as T[];
+
+		return {
+			items,
+			page_count: Math.ceil(itemCount / pagination.limit),
+			has_more: items.length >= pagination.limit,
+		};
 	}
 
 	public async count(): Promise<number> {
@@ -272,7 +318,7 @@ export default abstract class BaseModel<T> {
 	protected async isNew(object: T, options: SaveOptions): Promise<boolean> {
 		if (options.isNew === false) return false;
 		if (options.isNew === true) return true;
-		if ('id' in object && !(object as WithUuid).id) throw new Error('ID cannot be undefined or null');
+		if ('id' in (object as any) && !(object as WithUuid).id) throw new Error('ID cannot be undefined or null');
 		return !(object as WithUuid).id;
 	}
 
@@ -291,7 +337,7 @@ export default abstract class BaseModel<T> {
 			if (isNew) {
 				(toSave as WithDates).created_time = timestamp;
 			}
-			(toSave as WithDates).updated_time = timestamp;
+			if (this.hasUpdatedTime()) (toSave as WithDates).updated_time = timestamp;
 		}
 
 		if (options.skipValidation !== true) object = await this.validate(object, { isNew: isNew, rules: options.validationRules ? options.validationRules : {} });
@@ -314,8 +360,9 @@ export default abstract class BaseModel<T> {
 		return toSave;
 	}
 
-	public async loadByIds(ids: string[], options: LoadOptions = {}): Promise<T[]> {
+	public async loadByIds(ids: string[] | number[], options: LoadOptions = {}): Promise<T[]> {
 		if (!ids.length) return [];
+		ids = unique(ids);
 		return this.db(this.tableName).select(options.fields || this.defaultFields).whereIn('id', ids);
 	}
 
@@ -343,7 +390,7 @@ export default abstract class BaseModel<T> {
 		return !!o;
 	}
 
-	public async load(id: string, options: LoadOptions = {}): Promise<T> {
+	public async load(id: Uuid | number, options: LoadOptions = {}): Promise<T> {
 		if (!id) throw new Error('id cannot be empty');
 
 		return this.db(this.tableName).select(options.fields || this.defaultFields).where({ id: id }).first();

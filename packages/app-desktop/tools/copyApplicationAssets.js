@@ -1,13 +1,67 @@
-const fs = require('fs-extra');
+const { writeFile, copy, mkdirp, remove } = require('fs-extra');
 const glob = require('glob');
 const { resolve } = require('path');
-const { copyDir, dirname, copyFile, mkdir } = require('@joplin/tools/gulp/utils');
+const { dirname } = require('@joplin/tools/gulp/utils');
 
+const rootDir = resolve(__dirname, '../../..');
 const nodeModulesDir = resolve(__dirname, '../node_modules');
+
+function stripOffRootDir(path) {
+	if (path.startsWith(rootDir)) return path.substr(rootDir.length + 1);
+	return path;
+}
+
+const msleep = async (ms) => {
+	return new Promise((resolve) => {
+		setTimeout(() => {
+			resolve();
+		}, ms);
+	});
+};
+
+// Running this script on CI is very unreliable. It fails with errors that don't
+// make much sense, such as:
+//
+//     [Error: ENOENT: no such file or directory, copyfile
+//     '/home/runner/work/joplin/joplin/Assets/TinyMCE/langs/ro_RO.js' ->
+//     '/home/runner/work/joplin/joplin/packages/app-desktop/vendor/lib/tinymce/langs/ro_RO.js']
+//
+// (but "Assets/TinyMCE/langs/ro_RO.js" exists, since it's in the repo, and it's
+// normal that "tinymce/langs/ro_RO.js" doesn't exist since we want to create
+// it...)
+//
+// Another one, when trying to delete a directory:
+//
+//     ENOTEMPTY: directory not empty
+//
+// (also makes no sense since the point of calling `remove()` is to remove a
+// directory that is not empty)
+//
+// Those errors are random - they may or may not happen on a CI run, and always
+// on different files. Since they don't make sense and are seemingly impossible
+// to fix, we instead implement a retry mechanism with exponential backoff. The
+// failures are relatively rare so 5 attempts should be enough to ensure all CI
+// runs succeed.
+//
+// It's possible the same technique should be added to copyPluginAssets too.
+
+const withRetry = async (fn) => {
+	for (let i = 0; i < 5; i++) {
+		try {
+			await fn();
+			return;
+		} catch (error) {
+			console.warn(`withRetry: Failed calling function - will retry (${i})`, error);
+			await msleep(1000 + i * 1000);
+		}
+	}
+
+	throw new Error('withRetry: Could not run function after multiple attempts');
+};
 
 async function main() {
 	const langSourceDir = resolve(__dirname, '../../../Assets/TinyMCE/langs');
-	const buildLibDir = resolve(__dirname, '../build/lib');
+	const buildLibDir = resolve(__dirname, '../vendor/lib');
 
 	const dirs = [
 		'tinymce',
@@ -18,37 +72,55 @@ async function main() {
 			src: langSourceDir,
 			dest: `${buildLibDir}/tinymce/langs`,
 		},
+		{
+			src: resolve(__dirname, '../../pdf-viewer/dist'),
+			dest: `${buildLibDir}/@joplin/pdf-viewer`,
+		},
 	];
 
 	const files = [
 		'@fortawesome/fontawesome-free/css/all.min.css',
-		'react-datetime/css/react-datetime.css',
-		'smalltalk/css/smalltalk.css',
-		'roboto-fontface/css/roboto/roboto-fontface.css',
-		'codemirror/lib/codemirror.css',
-		'codemirror/addon/dialog/dialog.css',
 		'@joeattardi/emoji-button/dist/index.js',
+		'codemirror/addon/dialog/dialog.css',
+		'codemirror/lib/codemirror.css',
 		'mark.js/dist/mark.min.js',
+		'react-datetime/css/react-datetime.css',
+		'roboto-fontface/css/roboto/roboto-fontface.css',
+		'smalltalk/css/smalltalk.css',
+		'smalltalk/img/IDR_CLOSE_DIALOG_H.png',
+		'smalltalk/img/IDR_CLOSE_DIALOG.png',
 		{
 			src: resolve(__dirname, '../../lib/services/plugins/sandboxProxy.js'),
 			dest: `${buildLibDir}/@joplin/lib/services/plugins/sandboxProxy.js`,
 		},
+		{
+			src: resolve(__dirname, '../../pdf-viewer/index.html'),
+			dest: `${buildLibDir}/@joplin/pdf-viewer/index.html`,
+		},
 	];
 
-	for (const dir of dirs) {
-		let sourceDir, destDir;
+	// First we delete all the destination directories, then we copy the files.
+	// It seems there's a race condition if we delete then copy right away.
+	for (const action of ['delete', 'copy']) {
+		for (const dir of dirs) {
+			let sourceDir, destDir;
 
-		if (typeof dir !== 'string') {
-			sourceDir = dir.src;
-			destDir = dir.dest;
-		} else {
-			sourceDir = `${nodeModulesDir}/${dir}`;
-			destDir = `${buildLibDir}/${dir}`;
+			if (typeof dir !== 'string') {
+				sourceDir = dir.src;
+				destDir = dir.dest;
+			} else {
+				sourceDir = `${nodeModulesDir}/${dir}`;
+				destDir = `${buildLibDir}/${dir}`;
+			}
+
+			if (action === 'delete') {
+				await withRetry(() => remove(destDir));
+			} else {
+				console.info(`Copying ${stripOffRootDir(sourceDir)} => ${stripOffRootDir(destDir)}`);
+				await withRetry(() => mkdirp(destDir));
+				await withRetry(() => copy(sourceDir, destDir, { overwrite: true }));
+			}
 		}
-
-		console.info(`Copying ${sourceDir} => ${destDir}`);
-		await mkdir(destDir);
-		await copyDir(sourceDir, destDir);
 	}
 
 	for (const file of files) {
@@ -62,10 +134,10 @@ async function main() {
 			destFile = `${buildLibDir}/${file}`;
 		}
 
-		await mkdir(dirname(destFile));
+		await withRetry(() => mkdirp(dirname(destFile)));
 
-		console.info(`Copying ${sourceFile} => ${destFile}`);
-		await copyFile(sourceFile, destFile);
+		console.info(`Copying ${stripOffRootDir(sourceFile)} => ${stripOffRootDir(destFile)}`);
+		await withRetry(() => copy(sourceFile, destFile, { overwrite: true }));
 	}
 
 	const supportedLocales = glob.sync(`${langSourceDir}/*.js`).map(s => {
@@ -77,7 +149,7 @@ async function main() {
 
 	const content = `module.exports = ${JSON.stringify(supportedLocales, null, 2)}`;
 
-	await fs.writeFile(`${__dirname}/../gui/NoteEditor/NoteBody/TinyMCE/supportedLocales.js`, content, 'utf8');
+	await writeFile(`${__dirname}/../gui/NoteEditor/NoteBody/TinyMCE/supportedLocales.js`, content, 'utf8');
 }
 
 module.exports = main;

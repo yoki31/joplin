@@ -3,22 +3,23 @@ import { AppState } from '../app.reducer';
 import CommandService, { SearchResult as CommandSearchResult } from '@joplin/lib/services/CommandService';
 import KeymapService from '@joplin/lib/services/KeymapService';
 import shim from '@joplin/lib/shim';
-
 const { connect } = require('react-redux');
-const { _ } = require('@joplin/lib/locale');
-const { themeStyle } = require('@joplin/lib/theme');
+import { _ } from '@joplin/lib/locale';
+import { themeStyle } from '@joplin/lib/theme';
 import SearchEngine from '@joplin/lib/services/searchengine/SearchEngine';
+import gotoAnythingStyleQuery from '@joplin/lib/services/searchengine/gotoAnythingStyleQuery';
 import BaseModel from '@joplin/lib/BaseModel';
 import Tag from '@joplin/lib/models/Tag';
 import Folder from '@joplin/lib/models/Folder';
 import Note from '@joplin/lib/models/Note';
-const { ItemList } = require('../gui/ItemList.min');
-const HelpButton = require('../gui/HelpButton.min');
+import ItemList from '../gui/ItemList';
+import HelpButton from '../gui/HelpButton';
 const { surroundKeywords, nextWhitespaceIndex, removeDiacritics } = require('@joplin/lib/string-utils.js');
-const { mergeOverlappingIntervals } = require('@joplin/lib/ArrayUtils.js');
+import { mergeOverlappingIntervals } from '@joplin/lib/ArrayUtils';
 import markupLanguageUtils from '../utils/markupLanguageUtils';
 import focusEditorIfEditorCommand from '@joplin/lib/services/commands/focusEditorIfEditorCommand';
 import Logger from '@joplin/lib/Logger';
+import { MarkupToHtml } from '@joplin/renderer';
 
 const logger = Logger.create('GotoAnything');
 
@@ -81,7 +82,7 @@ class Dialog extends React.PureComponent<Props, State> {
 	private inputRef: any;
 	private itemListRef: any;
 	private listUpdateIID_: any;
-	private markupToHtml_: any;
+	private markupToHtml_: MarkupToHtml;
 	private userCallback_: any = null;
 
 	constructor(props: Props) {
@@ -213,7 +214,7 @@ class Dialog extends React.PureComponent<Props, State> {
 	}
 
 	modalLayer_onClick(event: any) {
-		if (event.currentTarget == event.target) {
+		if (event.currentTarget === event.target) {
 			this.props.dispatch({
 				pluginName: PLUGIN_NAME,
 				type: 'PLUGINLEGACY_DIALOG_SET',
@@ -239,19 +240,6 @@ class Dialog extends React.PureComponent<Props, State> {
 			await this.updateList();
 			this.listUpdateIID_ = null;
 		}, 100);
-	}
-
-	makeSearchQuery(query: string) {
-		const output = [];
-		const splitted = query.split(' ');
-
-		for (let i = 0; i < splitted.length; i++) {
-			const s = splitted[i].trim();
-			if (!s) continue;
-			output.push(`${s}*`);
-		}
-
-		return output.join(' ');
 	}
 
 	async keywords(searchQuery: string) {
@@ -320,7 +308,7 @@ class Dialog extends React.PureComponent<Props, State> {
 				}
 			} else { // Note TITLE or BODY
 				listType = BaseModel.TYPE_NOTE;
-				searchQuery = this.makeSearchQuery(this.state.query);
+				searchQuery = gotoAnythingStyleQuery(this.state.query);
 				results = await SearchEngine.instance().search(searchQuery);
 
 				resultsInBody = !!results.find((row: any) => row.fields.includes('body'));
@@ -496,10 +484,10 @@ class Dialog extends React.PureComponent<Props, State> {
 		const isSelected = item.id === this.state.selectedItemId;
 		const rowStyle = isSelected ? style.rowSelected : style.row;
 		const titleHtml = item.fragments
-			? `<span style="font-weight: bold; color: ${theme.colorBright};">${item.title}</span>`
-			: surroundKeywords(this.state.keywords, item.title, `<span style="font-weight: bold; color: ${theme.colorBright};">`, '</span>', { escapeHtml: true });
+			? `<span style="font-weight: bold; color: ${theme.color};">${item.title}</span>`
+			: surroundKeywords(this.state.keywords, item.title, `<span style="font-weight: bold; color: ${theme.searchMarkerColor}; background-color: ${theme.searchMarkerBackgroundColor}">`, '</span>', { escapeHtml: true });
 
-		const fragmentsHtml = !item.fragments ? null : surroundKeywords(this.state.keywords, item.fragments, `<span style="font-weight: bold; color: ${theme.colorBright};">`, '</span>', { escapeHtml: true });
+		const fragmentsHtml = !item.fragments ? null : surroundKeywords(this.state.keywords, item.fragments, `<span style="color: ${theme.searchMarkerColor}; background-color: ${theme.searchMarkerBackgroundColor}">`, '</span>', { escapeHtml: true });
 
 		const folderIcon = <i style={{ fontSize: theme.fontSize, marginRight: 2 }} className="fa fa-book" />;
 		const pathComp = !item.path ? null : <div style={style.rowPath}>{folderIcon} {item.path}</div>;

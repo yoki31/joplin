@@ -9,7 +9,10 @@ const Icon = require('react-native-vector-icons/Ionicons').default;
 const ModalDialog = require('../ModalDialog');
 const naturalCompare = require('string-natural-compare');
 
-Icon.loadFont();
+// We need this to suppress the useless warning
+// https://github.com/oblador/react-native-vector-icons/issues/1465
+// eslint-disable-next-line no-console
+Icon.loadFont().catch((error) => { console.info(error); });
 
 class NoteTagsDialogComponent extends React.Component {
 	constructor() {
@@ -21,6 +24,7 @@ class NoteTagsDialogComponent extends React.Component {
 			tagListData: [],
 			newTags: '',
 			savingTags: false,
+			tagFilter: '',
 		};
 
 		const noteHasTag = tagId => {
@@ -88,6 +92,10 @@ class NoteTagsDialogComponent extends React.Component {
 		this.cancelButton_press = () => {
 			if (this.props.onCloseRequested) this.props.onCloseRequested();
 		};
+
+		this.filterTags = (allTags) => {
+			return allTags.filter((tag) => tag.title.toLowerCase().includes(this.state.tagFilter.toLowerCase()), allTags);
+		};
 	}
 
 	UNSAFE_componentWillMount() {
@@ -109,7 +117,7 @@ class NoteTagsDialogComponent extends React.Component {
 		});
 
 		tagListData.sort((a, b) => {
-			if (a.selected === b.selected) return naturalCompare.caseInsensitive(a.title, b.title);
+			if (a.selected === b.selected) return naturalCompare(a.title, b.title, { caseInsensitive: true });
 			else if (b.selected === true) return 1;
 			else return -1;
 		});
@@ -140,16 +148,16 @@ class NoteTagsDialogComponent extends React.Component {
 				fontSize: 20,
 				color: theme.color,
 			},
-			newTagBox: {
+			tagBox: {
 				flexDirection: 'row',
 				alignItems: 'center',
-				paddingLeft: theme.marginLeft,
-				paddingRight: theme.marginRight,
+				paddingLeft: 10,
+				paddingRight: 10,
 				borderBottomWidth: 1,
 				borderBottomColor: theme.dividerColor,
 			},
 			newTagBoxLabel: Object.assign({}, theme.normalText, { marginRight: 8 }),
-			newTagBoxInput: Object.assign({}, theme.lineInput, { flex: 1 }),
+			tagBoxInput: Object.assign({}, theme.lineInput, { flex: 1 }),
 		};
 
 		this.styles_[themeId] = StyleSheet.create(styles);
@@ -161,7 +169,7 @@ class NoteTagsDialogComponent extends React.Component {
 
 		const dialogContent = (
 			<View style={{ flex: 1 }}>
-				<View style={this.styles().newTagBox}>
+				<View style={this.styles().tagBox}>
 					<Text style={this.styles().newTagBoxLabel}>{_('New tags:')}</Text>
 					<TextInput
 						selectionColor={theme.textSelectionColor}
@@ -170,10 +178,23 @@ class NoteTagsDialogComponent extends React.Component {
 						onChangeText={value => {
 							this.setState({ newTags: value });
 						}}
-						style={this.styles().newTagBoxInput}
+						style={this.styles().tagBoxInput}
+						placeholder={_('tag1, tag2, ...')}
 					/>
 				</View>
-				<FlatList data={this.state.tagListData} renderItem={this.renderTag} keyExtractor={this.tagKeyExtractor} />
+				<View style={this.styles().tagBox}>
+					<TextInput
+						selectionColor={theme.textSelectionColor}
+						keyboardAppearance={theme.keyboardAppearance}
+						value={this.state.tagFilter}
+						onChangeText={value => {
+							this.setState({ tagFilter: value });
+						}}
+						placeholder={_('Filter tags')}
+						style={this.styles().tagBoxInput}
+					/>
+				</View>
+				<FlatList data={this.filterTags(this.state.tagListData)} renderItem={this.renderTag} keyExtractor={this.tagKeyExtractor} />
 			</View>
 		);
 

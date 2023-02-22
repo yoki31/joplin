@@ -37,6 +37,9 @@ echo "GITHUB_EVENT_NAME=$GITHUB_EVENT_NAME"
 echo "GITHUB_REF=$GITHUB_REF"
 echo "RUNNER_OS=$RUNNER_OS"
 echo "GIT_TAG_NAME=$GIT_TAG_NAME"
+echo "BUILD_SEQUENCIAL=$BUILD_SEQUENCIAL"
+echo "SERVER_REPOSITORY=$SERVER_REPOSITORY"
+echo "SERVER_TAG_PREFIX=$SERVER_TAG_PREFIX"
 
 echo "IS_CONTINUOUS_INTEGRATION=$IS_CONTINUOUS_INTEGRATION"
 echo "IS_PULL_REQUEST=$IS_PULL_REQUEST"
@@ -54,6 +57,11 @@ echo "Yarn $( yarn -v )"
 
 cd "$ROOT_DIR"
 yarn install
+testResult=$?
+if [ $testResult -ne 0 ]; then
+	echo "Yarn installation failed. Search for 'exit code 1' in the log for more information."
+	exit $testResult
+fi
 
 # =============================================================================
 # Run test units. Only do it for pull requests and dev branch because we don't
@@ -99,6 +107,12 @@ if [ "$IS_PULL_REQUEST" == "1" ] || [ "$IS_DEV_BRANCH" = "1" ]; then
 	if [ $testResult -ne 0 ]; then
 		exit $testResult
 	fi
+
+	yarn run packageJsonLint
+	testResult=$?
+	if [ $testResult -ne 0 ]; then
+		exit $testResult
+	fi
 fi
 
 # =============================================================================
@@ -122,12 +136,11 @@ fi
 # =============================================================================
 # Check that we didn't lose any string due to gettext not being able to parse
 # newly modified or added scripts. This is convenient to quickly view on GitHub
-# what commit may have broken translation building. We run this on macOS because
-# we need the latest version of gettext (and stable Ubuntu doesn't have it).
+# what commit may have broken translation building.
 # =============================================================================
 
 if [ "$IS_PULL_REQUEST" == "1" ] || [ "$IS_DEV_BRANCH" = "1" ]; then
-	if [ "$IS_MACOS" == "1" ]; then
+	if [ "$IS_LINUX" == "1" ]; then
 		echo "Step: Checking for lost translation strings..."
 
 		xgettext --version
@@ -167,12 +180,15 @@ cd "$ROOT_DIR/packages/app-desktop"
 
 if [[ $GIT_TAG_NAME = v* ]]; then
 	echo "Step: Building and publishing desktop application..."
+	# cd "$ROOT_DIR/packages/tools"
+	# node bundleDefaultPlugins.js
+	cd "$ROOT_DIR/packages/app-desktop"
 	USE_HARD_LINKS=false yarn run dist
-elif [[ $GIT_TAG_NAME = server-v* ]] && [[ $IS_LINUX = 1 ]]; then
+elif [[ $IS_LINUX = 1 ]] && [[ $GIT_TAG_NAME = $SERVER_TAG_PREFIX-* ]]; then
 	echo "Step: Building Docker Image..."
 	cd "$ROOT_DIR"
-	yarn run buildServerDocker -- --tag-name $GIT_TAG_NAME --push-images
+	yarn run buildServerDocker --tag-name $GIT_TAG_NAME --push-images --repository $SERVER_REPOSITORY
 else
 	echo "Step: Building but *not* publishing desktop application..."
-	USE_HARD_LINKS=false yarn run dist -- --publish=never
+	USE_HARD_LINKS=false yarn run dist --publish=never
 fi

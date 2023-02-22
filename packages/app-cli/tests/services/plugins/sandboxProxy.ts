@@ -1,12 +1,11 @@
 const sandboxProxy = require('@joplin/lib/services/plugins/sandboxProxy');
 import { setupDatabaseAndSynchronizer, switchClient } from '@joplin/lib/testing/test-utils';
 
-describe('services_plugins_sandboxProxy', function() {
+describe('services_plugins_sandboxProxy', () => {
 
-	beforeEach(async (done: Function) => {
+	beforeEach(async () => {
 		await setupDatabaseAndSynchronizer(1);
 		await switchClient(1);
-		done();
 	});
 
 	it('should create a new sandbox proxy', (async () => {

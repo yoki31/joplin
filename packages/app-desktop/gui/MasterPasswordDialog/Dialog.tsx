@@ -34,6 +34,13 @@ export default function(props: Props) {
 	const [updatingPassword, setUpdatingPassword] = useState(false);
 	const [mode, setMode] = useState<Mode>(Mode.Set);
 
+	const showCurrentPassword = useMemo(() => {
+		if ([MasterPasswordStatus.NotSet, MasterPasswordStatus.Invalid].includes(status)) return false;
+		if (mode === Mode.Reset) return false;
+		return true;
+		// eslint-disable-next-line @seiyab/react-hooks/exhaustive-deps -- Old code before rule was applied
+	}, [status]);
+
 	const onClose = useCallback(() => {
 		props.dispatch({
 			type: 'DIALOG_CLOSE',
@@ -63,7 +70,7 @@ export default function(props: Props) {
 			setUpdatingPassword(true);
 			try {
 				if (mode === Mode.Set) {
-					await updateMasterPassword(currentPassword, password1);
+					await updateMasterPassword(showCurrentPassword ? currentPassword : null, password1);
 				} else if (mode === Mode.Reset) {
 					await resetMasterPassword(EncryptionService.instance(), KvStore.instance(), ShareService.instance(), password1);
 				} else {
@@ -78,6 +85,7 @@ export default function(props: Props) {
 			}
 			return;
 		}
+		// eslint-disable-next-line @seiyab/react-hooks/exhaustive-deps -- Old code before rule was applied
 	}, [currentPassword, password1, onClose, mode]);
 
 	const needToRepeatPassword = useMemo(() => {
@@ -115,7 +123,7 @@ export default function(props: Props) {
 	}, [password1, password2, updatingPassword, needToRepeatPassword]);
 
 	useEffect(() => {
-		setShowPasswordForm(status === MasterPasswordStatus.NotSet);
+		setShowPasswordForm([MasterPasswordStatus.NotSet, MasterPasswordStatus.Invalid].includes(status));
 	}, [status]);
 
 	useAsyncEffect(async (event: AsyncEffectEvent) => {
@@ -131,8 +139,7 @@ export default function(props: Props) {
 
 	function renderPasswordForm() {
 		const renderCurrentPassword = () => {
-			if (status === MasterPasswordStatus.NotSet) return null;
-			if (mode === Mode.Reset) return null;
+			if (!showCurrentPassword) return null;
 
 			// If the master password is in the keychain we preload it into the
 			// field and allow displaying it. That way if the user has forgotten

@@ -1,6 +1,7 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, MutableRefObject, useEffect } from 'react';
 import Logger from '@joplin/lib/Logger';
 import { SearchMarkers } from './useSearchMarkers';
+const CommandService = require('@joplin/lib/services/CommandService').default;
 
 const logger = Logger.create('useNoteSearchBar');
 
@@ -24,9 +25,20 @@ function defaultLocalSearch(): LocalSearch {
 	};
 }
 
-export default function useNoteSearchBar() {
+export interface UseNoteSearchBarProps {
+	noteSearchBarRef: MutableRefObject<any>;
+}
+
+export default function useNoteSearchBar({ noteSearchBarRef }: UseNoteSearchBarProps) {
 	const [showLocalSearch, setShowLocalSearch] = useState(false);
 	const [localSearch, setLocalSearch] = useState<LocalSearch>(defaultLocalSearch());
+
+
+	useEffect(() => {
+		if (showLocalSearch && noteSearchBarRef.current) {
+			noteSearchBarRef.current.focus();
+		}
+	}, [showLocalSearch, noteSearchBarRef]);
 
 	const onChange = useCallback((query: string) => {
 		// A query that's too long would make CodeMirror throw an exception
@@ -70,6 +82,7 @@ export default function useNoteSearchBar() {
 	const onClose = useCallback(() => {
 		setShowLocalSearch(false);
 		setLocalSearch(defaultLocalSearch());
+		void CommandService.instance().execute('focusElementNoteBody');
 	}, []);
 
 	const setResultCount = useCallback((count: number) => {
@@ -90,6 +103,7 @@ export default function useNoteSearchBar() {
 				selectedIndex: localSearch.selectedIndex,
 				separateWordSearch: false,
 				searchTimestamp: localSearch.timestamp,
+				withSelection: true,
 			},
 			keywords: [
 				{

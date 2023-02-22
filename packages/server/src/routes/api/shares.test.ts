@@ -4,7 +4,7 @@ import { postApi, getApi } from '../../utils/testing/apiUtils';
 import { shareWithUserAndAccept } from '../../utils/testing/shareApiUtils';
 import { PaginatedResults } from '../../models/utils/pagination';
 
-describe('shares', function() {
+describe('shares', () => {
 
 	beforeAll(async () => {
 		await beforeAllDb('shares');
@@ -18,7 +18,7 @@ describe('shares', function() {
 		await beforeEachDb();
 	});
 
-	test('should retrieve share info', async function() {
+	test('should retrieve share info', async () => {
 		const { user: user1, session: session1 } = await createUserAndSession(1);
 		const { user: user2, session: session2 } = await createUserAndSession(2);
 		const { user: user3 } = await createUserAndSession(3);
@@ -49,7 +49,7 @@ describe('shares', function() {
 		});
 
 		{
-			const shares = await getApi<PaginatedResults>(session1.id, 'shares');
+			const shares = await getApi<PaginatedResults<any>>(session1.id, 'shares');
 			expect(shares.items.length).toBe(2);
 
 			const share1: Share = shares.items.find(it => it.folder_id === '000000000000000000000000000000F1');
@@ -60,7 +60,7 @@ describe('shares', function() {
 			expect(share2).toBeTruthy();
 			expect(share2.type).toBe(ShareType.Note);
 
-			const shareUsers = await getApi<PaginatedResults>(session1.id, `shares/${share1.id}/users`);
+			const shareUsers = await getApi<PaginatedResults<any>>(session1.id, `shares/${share1.id}/users`);
 			expect(shareUsers.items.length).toBe(2);
 
 			const su2 = shareUsers.items.find(su => su.user.email === 'user2@localhost');

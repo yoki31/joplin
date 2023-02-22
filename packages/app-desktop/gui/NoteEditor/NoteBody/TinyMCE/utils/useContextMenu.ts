@@ -3,13 +3,15 @@ import { PluginStates } from '@joplin/lib/services/plugins/reducer';
 import SpellCheckerService from '@joplin/lib/services/spellChecker/SpellCheckerService';
 import { useEffect } from 'react';
 import bridge from '../../../../../services/bridge';
-import { menuItems, ContextMenuOptions, ContextMenuItemType } from '../../../utils/contextMenu';
+import { ContextMenuOptions, ContextMenuItemType } from '../../../utils/contextMenuUtils';
+import { menuItems } from '../../../utils/contextMenu';
 import MenuUtils from '@joplin/lib/services/commands/MenuUtils';
 import CommandService from '@joplin/lib/services/CommandService';
 import convertToScreenCoordinates from '../../../../utils/convertToScreenCoordinates';
 import Setting from '@joplin/lib/models/Setting';
 
 import Resource from '@joplin/lib/models/Resource';
+import { TinyMceEditorEvents } from './types';
 
 const menuUtils = new MenuUtils(CommandService.instance());
 
@@ -67,6 +69,8 @@ export default function(editor: any, plugins: PluginStates, dispatch: Function) 
 			contextMenuActionOptions.current = {
 				itemType,
 				resourceId,
+				filename: null,
+				mime: null,
 				linkToCopy,
 				textToCopy: null,
 				htmlToCopy: editor.selection ? editor.selection.getContent() : '',
@@ -74,6 +78,9 @@ export default function(editor: any, plugins: PluginStates, dispatch: Function) 
 					editor.insertContent(content);
 				},
 				isReadOnly: false,
+				fireEditorEvent: (event: TinyMceEditorEvents) => {
+					editor.fire(event);
+				},
 			};
 
 			let template = [];

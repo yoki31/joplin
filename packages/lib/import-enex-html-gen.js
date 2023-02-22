@@ -1,6 +1,7 @@
 const stringToStream = require('string-to-stream');
 // const cleanHtml = require('clean-html');
 const resourceUtils = require('./resourceUtils.js');
+const { cssValue } = require('./import-enex-md-gen');
 const htmlUtils = require('./htmlUtils').default;
 const Entities = require('html-entities').AllHtmlEntities;
 const htmlentities = new Entities().encode;
@@ -16,10 +17,8 @@ function addResourceTag(lines, resource, attributes) {
 	if (resourceUtils.isImageMimeType(resource.mime)) {
 		lines.push(resourceUtils.imgElement({ src, attributes }));
 	} else if (resource.mime === 'audio/x-m4a') {
-		/**
-		 * TODO: once https://github.com/laurent22/joplin/issues/1794 is resolved,
-		 * come back to this and make sure it works.
-		 */
+		// TODO: once https://github.com/laurent22/joplin/issues/1794 is resolved,
+		// come back to this and make sure it works.
 		lines.push(resourceUtils.audioElement({
 			src,
 			alt: attributes.alt,
@@ -70,18 +69,19 @@ function enexXmlToHtml_(stream, resources) {
 			parent: null,
 		};
 
-		saxStream.on('error', function(e) {
+		saxStream.on('error', (e) => {
 			console.warn(e);
 		});
 
 
-		saxStream.on('text', function(text) {
+		saxStream.on('text', (text) => {
 			section.lines.push(htmlentities(text));
 		});
 
 		saxStream.on('opentag', function(node) {
 			const tagName = node.name.toLowerCase();
 			const attributesStr = resourceUtils.attributesToStr(node.attributes);
+			const nodeAttributes = attributeToLowerCase(node);
 
 			if (tagName === 'en-media') {
 				const nodeAttributes = attributeToLowerCase(node);
@@ -90,7 +90,7 @@ function enexXmlToHtml_(stream, resources) {
 				let resource = null;
 				for (let i = 0; i < resources.length; i++) {
 					const r = resources[i];
-					if (r.id == hash) {
+					if (r.id === hash) {
 						resource = r;
 						removeRemainingResource(r.id);
 						break;
@@ -122,10 +122,12 @@ function enexXmlToHtml_(stream, resources) {
 				if (resource && !!resource.id) {
 					section.lines = addResourceTag(section.lines, resource, nodeAttributes);
 				}
-			} else if (tagName == 'en-todo') {
-				const nodeAttributes = attributeToLowerCase(node);
-				const checkedHtml = nodeAttributes.checked && nodeAttributes.checked.toLowerCase() == 'true' ? ' checked="checked" ' : ' ';
+			} else if (tagName === 'en-todo') {
+				const checkedHtml = nodeAttributes.checked && nodeAttributes.checked.toLowerCase() === 'true' ? ' checked="checked" ' : ' ';
 				section.lines.push(`<input${checkedHtml}type="checkbox" onclick="return false;" />`);
+			} else if (tagName === 'li' && cssValue(this, nodeAttributes.style, '--en-checked')) {
+				const checkedHtml = cssValue(this, nodeAttributes.style, '--en-checked') === 'true' ? ' checked="checked" ' : ' ';
+				section.lines.push(`<${tagName}${attributesStr}> <input${checkedHtml}type="checkbox" onclick="return false;" />`);
 			} else if (htmlUtils.isSelfClosingTag(tagName)) {
 				section.lines.push(`<${tagName}${attributesStr}/>`);
 			} else {
@@ -133,14 +135,14 @@ function enexXmlToHtml_(stream, resources) {
 			}
 		});
 
-		saxStream.on('closetag', function(node) {
+		saxStream.on('closetag', (node) => {
 			const tagName = node ? node.toLowerCase() : node;
 			if (!htmlUtils.isSelfClosingTag(tagName)) section.lines.push(`</${tagName}>`);
 		});
 
-		saxStream.on('attribute', function() {});
+		saxStream.on('attribute', () => {});
 
-		saxStream.on('end', function() {
+		saxStream.on('end', () => {
 			resolve({
 				content: section,
 				resources: remainingResources,

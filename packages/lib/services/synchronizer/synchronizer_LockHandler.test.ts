@@ -20,9 +20,9 @@ function lockHandler(): LockHandler {
 	return lockHandler_;
 }
 
-describe('synchronizer_LockHandler', function() {
+describe('synchronizer_LockHandler', () => {
 
-	beforeEach(async (done: Function) => {
+	beforeEach(async () => {
 		// logger.setLevel(Logger.LEVEL_WARN);
 		lockHandler_ = null;
 		await setupDatabaseAndSynchronizer(1);
@@ -30,7 +30,6 @@ describe('synchronizer_LockHandler', function() {
 		await switchClient(1);
 		await synchronizer().start(); // Need to sync once to setup the sync target and allow locks to work
 		// logger.setLevel(Logger.LEVEL_DEBUG);
-		done();
 	});
 
 	it('should acquire and release a sync lock', (async () => {

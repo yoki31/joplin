@@ -11,46 +11,16 @@ const rootDir = `${__dirname}/../..`;
 
 const markdownUtils = require('@joplin/lib/markdownUtils').default;
 const fs = require('fs-extra');
-const gettextParser = require('gettext-parser');
-
+const { translationExecutablePath, removePoHeaderDate, mergePotToPo, parsePoFile, parseTranslations } = require('./utils/translation');
 const localesDir = `${__dirname}/locales`;
 const libDir = `${rootDir}/packages/lib`;
-
 const { execCommand, isMac, insertContentIntoFile, filename, dirname, fileExtension } = require('./tool-utils.js');
 const { countryDisplayName, countryCodeOnly } = require('@joplin/lib/locale');
 
 const { GettextExtractor, JsExtractors } = require('gettext-extractor');
 
-
-function parsePoFile(filePath) {
-	const content = fs.readFileSync(filePath);
-	return gettextParser.po.parse(content);
-}
-
 function serializeTranslation(translation) {
-	const output = {};
-
-	// Translations are grouped by "msgctxt"
-
-	for (const msgctxt of Object.keys(translation.translations)) {
-		const translations = translation.translations[msgctxt];
-
-		for (const n in translations) {
-			if (!translations.hasOwnProperty(n)) continue;
-			if (n == '') continue;
-			const t = translations[n];
-			let translated = '';
-			if (t.comments && t.comments.flag && t.comments.flag.indexOf('fuzzy') >= 0) {
-				// Don't include fuzzy translations
-			} else {
-				translated = t['msgstr'][0];
-			}
-
-			if (translated) output[n] = translated;
-		}
-	}
-
-	// Sort the translations to make the diff easier to read.
+	const output = parseTranslations(translation);
 	return JSON.stringify(output, Object.keys(output).sort((a, b) => a.toLowerCase() < b.toLowerCase() ? -1 : +1), ' ');
 }
 
@@ -58,33 +28,10 @@ function saveToFile(filePath, data) {
 	fs.writeFileSync(filePath, data);
 }
 
-function buildLocale(inputFile, outputFile) {
-	const r = parsePoFile(inputFile);
+async function buildLocale(inputFile, outputFile) {
+	const r = await parsePoFile(inputFile);
 	const translation = serializeTranslation(r);
 	saveToFile(outputFile, translation);
-}
-
-function executablePath(file) {
-	const potentialPaths = [
-		'/usr/local/opt/gettext/bin/',
-		'/opt/local/bin/',
-		'/usr/local/bin/',
-	];
-
-	for (const path of potentialPaths) {
-		const pathFile = path + file;
-		if (fs.existsSync(pathFile)) {
-			return pathFile;
-		}
-	}
-	throw new Error(`${file} could not be found. Please install via brew or MacPorts.\n`);
-}
-
-async function removePoHeaderDate(filePath) {
-	let sedPrefix = 'sed -i';
-	if (isMac()) sedPrefix += ' ""'; // Note: on macOS it has to be 'sed -i ""' (BSD quirk)
-	await execCommand(`${sedPrefix} -e'/POT-Creation-Date:/d' "${filePath}"`);
-	await execCommand(`${sedPrefix} -e'/PO-Revision-Date:/d' "${filePath}"`);
 }
 
 async function createPotFile(potFilePath) {
@@ -102,12 +49,14 @@ async function createPotFile(potFilePath) {
 		'./packages/app-cli/tests-build/*',
 		'./packages/app-cli/tests/*',
 		'./packages/app-clipper/*',
+		'./packages/app-desktop/build/*',
 		'./packages/app-desktop/dist/*',
 		'./packages/app-desktop/gui/note-viewer/pluginAssets/*',
 		'./packages/app-desktop/gui/style/*',
 		'./packages/app-desktop/lib/*',
 		'./packages/app-desktop/pluginAssets/*',
 		'./packages/app-desktop/tools/*',
+		'./packages/app-desktop/vendor/*',
 		'./packages/app-mobile/android/*',
 		'./packages/app-mobile/ios/*',
 		'./packages/app-mobile/pluginAssets/*',
@@ -116,6 +65,7 @@ async function createPotFile(potFilePath) {
 		'./packages/lib/rnInjectedJs/*',
 		'./packages/lib/vendor/*',
 		'./packages/renderer/assets/*',
+		'./packages/server/dist/*',
 		'./packages/tools/*',
 		'./packages/turndown-plugin-gfm/*',
 		'./packages/turndown/*',
@@ -126,6 +76,11 @@ async function createPotFile(potFilePath) {
 	const findCommand = `find . -type f \\( -iname \\*.js -o -iname \\*.ts -o -iname \\*.tsx \\) -not -path '${excludedDirs.join('\' -not -path \'')}'`;
 	process.chdir(rootDir);
 	let files = (await execCommand(findCommand)).split('\n');
+
+	// Further filter files - in particular remove some specific files and
+	// extensions we don't need. Also, when there's two file with the same
+	// basename, such as "exmaple.js", and "example.ts", we only keep the file
+	// with ".ts" extension (since the .js should be the compiled file).
 
 	const toProcess = {};
 
@@ -140,6 +95,9 @@ async function createPotFile(potFilePath) {
 		if (nameNoExt.endsWith('.eslintrc')) continue;
 		if (nameNoExt.endsWith('jest.config')) continue;
 		if (nameNoExt.endsWith('jest.setup')) continue;
+		if (nameNoExt.endsWith('webpack.config')) continue;
+		if (nameNoExt.endsWith('.prettierrc')) continue;
+		if (file.endsWith('.d.ts')) continue;
 
 		if (toProcess[nameNoExt] && ['ts', 'tsx'].includes(fileExtension(toProcess[nameNoExt]))) {
 			continue;
@@ -154,6 +112,9 @@ async function createPotFile(potFilePath) {
 	}
 
 	files.sort();
+
+	// console.info(files.join('\n'));
+	// process.exit(0);
 
 	// Note: we previously used the xgettext utility, but it only partially
 	// supports TypeScript and doesn't support .tsx files at all. Besides; the
@@ -209,16 +170,6 @@ async function createPotFile(potFilePath) {
 	});
 
 	await removePoHeaderDate(potFilePath);
-}
-
-async function mergePotToPo(potFilePath, poFilePath) {
-	let msgmergePath = 'msgmerge';
-	if (isMac()) msgmergePath = executablePath('msgmerge'); // Needs to have been installed with `brew install gettext`
-
-	const command = `${msgmergePath} -U "${poFilePath}" "${potFilePath}"`;
-	const result = await execCommand(command);
-	if (result && result.trim()) console.info(result.trim());
-	await removePoHeaderDate(poFilePath);
 }
 
 function buildIndex(locales, stats) {
@@ -282,7 +233,7 @@ function translatorNameToMarkdown(translatorName) {
 async function translationStatus(isDefault, poFile) {
 	// "apt install translate-toolkit" to have pocount
 	let pocountPath = 'pocount';
-	if (isMac()) pocountPath = executablePath('pocount');
+	if (isMac()) pocountPath = translationExecutablePath('pocount');
 
 	const command = `${pocountPath} "${poFile}"`;
 	const result = await execCommand(command);
@@ -334,7 +285,7 @@ function flagImageUrl(locale) {
 	if (locale === 'sv') return `${baseUrl}/country-4x3/se.png`;
 	if (locale === 'nb_NO') return `${baseUrl}/country-4x3/no.png`;
 	if (locale === 'ro') return `${baseUrl}/country-4x3/ro.png`;
-	if (locale === 'vi') return `${baseUrl}/country-4x3/vi.png`;
+	if (locale === 'vi') return `${baseUrl}/country-4x3/vn.png`;
 	if (locale === 'fa') return `${baseUrl}/country-4x3/ir.png`;
 	if (locale === 'eo') return `${baseUrl}/esperanto.png`;
 	return `${baseUrl}/country-4x3/${countryCodeOnly(locale).toLowerCase()}.png`;
@@ -439,8 +390,8 @@ async function main() {
 
 		const poFilePäth = `${localesDir}/${locale}.po`;
 		const jsonFilePath = `${jsonLocalesDir}/${locale}.json`;
-		if (locale != defaultLocale) await mergePotToPo(potFilePath, poFilePäth);
-		buildLocale(poFilePäth, jsonFilePath);
+		if (locale !== defaultLocale) await mergePotToPo(potFilePath, poFilePäth);
+		await buildLocale(poFilePäth, jsonFilePath);
 
 		const stat = await translationStatus(defaultLocale === locale, poFilePäth);
 		stat.locale = locale;
@@ -451,16 +402,6 @@ async function main() {
 	stats.sort((a, b) => a.languageName < b.languageName ? -1 : +1);
 
 	saveToFile(`${jsonLocalesDir}/index.js`, buildIndex(locales, stats));
-
-	// const destDirs = [
-	// 	`${libDir}/locales`,
-	// 	`${electronDir}/locales`,
-	// 	`${cliDir}/locales-build`,
-	// ];
-
-	// for (const destDir of destDirs) {
-	// 	await execCommand(`rsync -a "${jsonLocalesDir}/" "${destDir}/"`);
-	// }
 
 	await updateReadmeWithStats(stats);
 }

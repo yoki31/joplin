@@ -20,7 +20,7 @@ const { space } = require('styled-system');
 
 const logger = Logger.create('PluginState');
 
-const maxWidth: number = 320;
+const maxWidth = 320;
 
 const Root = styled.div`
 	display: flex;
@@ -101,6 +101,7 @@ export default function(props: Props) {
 
 	const pluginSettings = useMemo(() => {
 		return pluginService.unserializePluginSettings(props.value);
+		// eslint-disable-next-line @seiyab/react-hooks/exhaustive-deps -- Old code before rule was applied
 	}, [props.value]);
 
 	const pluginItems = usePluginItems(pluginService.plugins, pluginSettings);
@@ -167,6 +168,7 @@ export default function(props: Props) {
 		});
 
 		props.onChange({ value: pluginService.serializePluginSettings(newSettings) });
+		// eslint-disable-next-line @seiyab/react-hooks/exhaustive-deps -- Old code before rule was applied
 	}, [pluginSettings, props.onChange]);
 
 	const onToggle = useCallback((event: ItemEvent) => {
@@ -178,6 +180,7 @@ export default function(props: Props) {
 		});
 
 		props.onChange({ value: pluginService.serializePluginSettings(newSettings) });
+		// eslint-disable-next-line @seiyab/react-hooks/exhaustive-deps -- Old code before rule was applied
 	}, [pluginSettings, props.onChange]);
 
 	const onInstall = useCallback(async () => {
@@ -195,14 +198,16 @@ export default function(props: Props) {
 		});
 
 		props.onChange({ value: pluginService.serializePluginSettings(newSettings) });
+		// eslint-disable-next-line @seiyab/react-hooks/exhaustive-deps -- Old code before rule was applied
 	}, [pluginSettings, props.onChange]);
 
 	const onBrowsePlugins = useCallback(() => {
-		bridge().openExternal('https://github.com/joplin/plugins/blob/master/README.md#plugins');
+		void bridge().openExternal('https://github.com/joplin/plugins/blob/master/README.md#plugins');
 	}, []);
 
 	const onPluginSettingsChange = useCallback((event: OnPluginSettingChangeEvent) => {
 		props.onChange({ value: pluginService.serializePluginSettings(event.value) });
+		// eslint-disable-next-line @seiyab/react-hooks/exhaustive-deps -- Old code before rule was applied
 	}, []);
 
 	const onUpdate = useOnInstallHandler(setUpdatingPluginIds, pluginSettings, repoApi, onPluginSettingsChange, true);
@@ -229,6 +234,7 @@ export default function(props: Props) {
 
 	const onSearchPluginSettingsChange = useCallback((event: any) => {
 		props.onChange({ value: pluginService.serializePluginSettings(event.value) });
+		// eslint-disable-next-line @seiyab/react-hooks/exhaustive-deps -- Old code before rule was applied
 	}, [props.onChange]);
 
 	function renderCells(items: PluginItem[]) {

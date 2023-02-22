@@ -1,4 +1,5 @@
 // AUTO-GENERATED using `gulp buildCommandIndex`
+import * as addProfile from './addProfile';
 import * as commandPalette from './commandPalette';
 import * as editAlarm from './editAlarm';
 import * as exportPdf from './exportPdf';
@@ -12,11 +13,15 @@ import * as newSubFolder from './newSubFolder';
 import * as newTodo from './newTodo';
 import * as openFolder from './openFolder';
 import * as openFolderDialog from './openFolderDialog';
+import * as openItem from './openItem';
 import * as openNote from './openNote';
+import * as openPdfViewer from './openPdfViewer';
 import * as openTag from './openTag';
 import * as print from './print';
 import * as renameFolder from './renameFolder';
 import * as renameTag from './renameTag';
+import * as resetLayout from './resetLayout';
+import * as revealResourceFile from './revealResourceFile';
 import * as search from './search';
 import * as setTags from './setTags';
 import * as showModalMessage from './showModalMessage';
@@ -36,6 +41,7 @@ import * as toggleSideBar from './toggleSideBar';
 import * as toggleVisiblePanes from './toggleVisiblePanes';
 
 const index:any[] = [
+	addProfile,
 	commandPalette,
 	editAlarm,
 	exportPdf,
@@ -49,11 +55,15 @@ const index:any[] = [
 	newTodo,
 	openFolder,
 	openFolderDialog,
+	openItem,
 	openNote,
+	openPdfViewer,
 	openTag,
 	print,
 	renameFolder,
 	renameTag,
+	resetLayout,
+	revealResourceFile,
 	search,
 	setTags,
 	showModalMessage,

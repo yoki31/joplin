@@ -1,10 +1,8 @@
 const mimeUtils = require('./mime-utils.js').mime;
 
-describe('mimeUils', function() {
+describe('mimeUils', () => {
 
-	beforeEach(async (done) => {
-		done();
-	});
+
 
 	it('should get the file extension from the mime type', (async () => {
 		expect(mimeUtils.toFileExtension('image/jpeg')).toBe('jpg');

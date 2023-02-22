@@ -3,7 +3,6 @@ import { _ } from '../../locale';
 import BaseItem, { EncryptedItemsStats } from '../../models/BaseItem';
 import useAsyncEffect, { AsyncEffectEvent } from '../../hooks/useAsyncEffect';
 import { MasterKeyEntity } from '../../services/e2ee/types';
-// import time from '../../time';
 import { findMasterKeyPassword, getMasterPasswordStatus, masterPasswordIsValid, MasterPasswordStatus } from '../../services/e2ee/utils';
 import EncryptionService from '../../services/e2ee/EncryptionService';
 import { masterKeyEnabled, setMasterKeyEnabled } from '../../services/synchronizer/syncInfoUtils';
@@ -118,6 +117,7 @@ export const useInputMasterPassword = (masterKeys: MasterKeyEntity[], activeMast
 		if (!(await masterPasswordIsValid(inputMasterPassword, masterKeys.find(mk => mk.id === activeMasterKeyId)))) {
 			alert('Password is invalid. Please try again.');
 		}
+		// eslint-disable-next-line @seiyab/react-hooks/exhaustive-deps -- Old code before rule was applied
 	}, [inputMasterPassword]);
 
 	const onMasterPasswordChange = useCallback((password: string) => {

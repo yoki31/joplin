@@ -3,13 +3,7 @@ const os = require('os');
 const { filename } = require('@joplin/lib/path-utils');
 import HtmlToMd from '@joplin/lib/HtmlToMd';
 
-describe('HtmlToMd', function() {
-
-	// beforeEach(async (done) => {
-	// 	await setupDatabaseAndSynchronizer(1);
-	// 	await switchClient(1);
-	// 	done();
-	// });
+describe('HtmlToMd', () => {
 
 	it('should convert from Html to Markdown', (async () => {
 		const basePath = `${__dirname}/html_to_md`;
@@ -63,6 +57,7 @@ describe('HtmlToMd', function() {
 				result.push('--------------------------------------------');
 				result.push('');
 
+				// eslint-disable-next-line no-console
 				console.info(result.join('\n'));
 
 				// console.info('');

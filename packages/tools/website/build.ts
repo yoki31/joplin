@@ -2,27 +2,39 @@ import { readFileSync, readFile, mkdirpSync, writeFileSync, remove, copy, pathEx
 import { rootDir } from '../tool-utils';
 import { pressCarouselItems } from './utils/pressCarousel';
 import { getMarkdownIt, loadMustachePartials, markdownToPageHtml, renderMustache } from './utils/render';
-import { AssetUrls, Env, PlanPageParams, Sponsors, TemplateParams } from './utils/types';
-import { getPlans, loadStripeConfig } from '@joplin/lib/utils/joplinCloud';
+import { AssetUrls, Env, Partials, PlanPageParams, Sponsors, TemplateParams } from './utils/types';
+import { createFeatureTableMd, getPlans, loadStripeConfig } from '@joplin/lib/utils/joplinCloud';
 import { stripOffFrontMatter } from './utils/frontMatter';
 import { dirname, basename } from 'path';
-const moment = require('moment');
+import { readmeFileTitle, replaceGitHubByWebsiteLinks } from './utils/parser';
+import { extractOpenGraphTags } from './utils/openGraph';
+import { readCredentialFileJson } from '@joplin/lib/utils/credentialFiles';
+import { getNewsDateString } from './utils/news';
+import { parsePoFile, parseTranslations, Translations } from '../utils/translation';
+import { countryCodeOnly, setLocale } from '@joplin/lib/locale';
+import applyTranslations from './utils/applyTranslations';
+
+interface BuildConfig {
+	env: Env;
+}
+
+const buildConfig = readCredentialFileJson<BuildConfig>('website-build.json', {
+	env: Env.Prod,
+});
 
 const glob = require('glob');
 const path = require('path');
-const md5File = require('md5-file/promise');
-
-const env = Env.Prod;
-
+const md5File = require('md5-file');
 const docDir = `${dirname(dirname(dirname(dirname(__dirname))))}/joplin-website/docs`;
 
 if (!pathExistsSync(docDir)) throw new Error(`Doc directory does not exist: ${docDir}`);
 
 const websiteAssetDir = `${rootDir}/Assets/WebsiteAssets`;
+const readmeDir = `${rootDir}/readme`;
 const mainTemplateHtml = readFileSync(`${websiteAssetDir}/templates/main-new.mustache`, 'utf8');
 const frontTemplateHtml = readFileSync(`${websiteAssetDir}/templates/front.mustache`, 'utf8');
 const plansTemplateHtml = readFileSync(`${websiteAssetDir}/templates/plans.mustache`, 'utf8');
-const stripeConfig = loadStripeConfig(env, `${rootDir}/packages/server/stripeConfig.json`);
+const stripeConfig = loadStripeConfig(buildConfig.env, `${rootDir}/packages/server/stripeConfig.json`);
 const partialDir = `${websiteAssetDir}/templates/partials`;
 
 const discussLink = 'https://discourse.joplinapp.org/c/news/9';
@@ -46,13 +58,6 @@ async function getDonateLinks() {
 	if (!matches) throw new Error('Cannot fetch donate links');
 
 	return `<div class="donate-links">\n\n${matches[1].trim()}\n\n</div>`;
-}
-
-function replaceGitHubByWebsiteLinks(md: string) {
-	return md
-		.replace(/https:\/\/github.com\/laurent22\/joplin\/blob\/dev\/readme\/(.*?)\.md(#[^\s)]+|)/g, '/$1/$2')
-		.replace(/https:\/\/github.com\/laurent22\/joplin\/blob\/dev\/README\.md(#[^\s)]+|)/g, '/help/$1')
-		.replace(/https:\/\/raw.githubusercontent.com\/laurent22\/joplin\/dev\/Assets\/WebsiteAssets\/(.*?)/g, '/$1');
 }
 
 function tocHtml() {
@@ -86,7 +91,7 @@ async function getAssetUrls(): Promise<AssetUrls> {
 
 function defaultTemplateParams(assetUrls: AssetUrls): TemplateParams {
 	return {
-		env,
+		env: buildConfig.env,
 		baseUrl,
 		imageBaseUrl: `${baseUrl}/images`,
 		cssBaseUrl,
@@ -102,6 +107,7 @@ function defaultTemplateParams(assetUrls: AssetUrls): TemplateParams {
 			isFrontPage: false,
 		},
 		assetUrls,
+		openGraph: null,
 	};
 }
 
@@ -114,7 +120,7 @@ function renderPageToHtml(md: string, targetPath: string, templateParams: Templa
 		...templateParams,
 	};
 
-	templateParams.showBottomLinks = templateParams.showImproveThisDoc || !!templateParams.discussOnForumLink;
+	templateParams.showBottomLinks = templateParams.showImproveThisDoc;
 
 	const title = [];
 
@@ -140,22 +146,18 @@ function renderPageToHtml(md: string, targetPath: string, templateParams: Templa
 	writeFileSync(targetPath, html);
 }
 
-async function readmeFileTitle(sourcePath: string) {
-	let md = await readFile(sourcePath, 'utf8');
-	md = stripOffFrontMatter(md).doc;
-	const r = md.match(/(^|\n)# (.*)/);
-
-	if (!r) {
-		throw new Error(`Could not determine title for Markdown file: ${sourcePath}`);
-	} else {
-		return r[2];
-	}
-}
-
 function renderFileToHtml(sourcePath: string, targetPath: string, templateParams: TemplateParams) {
-	let md = readFileSync(sourcePath, 'utf8');
-	md = stripOffFrontMatter(md).doc;
-	return renderPageToHtml(md, targetPath, templateParams);
+	try {
+		let md = readFileSync(sourcePath, 'utf8');
+		if (templateParams.isNews) {
+			md = processNewsMarkdown(md, sourcePath);
+		}
+		md = stripOffFrontMatter(md).doc;
+		return renderPageToHtml(md, targetPath, templateParams);
+	} catch (error) {
+		error.message = `Could not render file: ${sourcePath}: ${error.message}`;
+		throw error;
+	}
 }
 
 function makeHomePageMd() {
@@ -165,6 +167,10 @@ function makeHomePageMd() {
 	// HACK: GitHub needs the \| or the inline code won't be displayed correctly inside the table,
 	// while MarkdownIt doesn't and will in fact display the \. So we remove it here.
 	md = md.replace(/\\\| bash/g, '| bash');
+
+	// We strip-off the donate links because they are added back (with proper
+	// classes and CSS).
+	md = md.replace(donateLinksRegex_, '');
 
 	return md;
 }
@@ -179,6 +185,15 @@ async function loadSponsors(): Promise<Sponsors> {
 	return output;
 }
 
+const processNewsMarkdown = (md: string, mdFilePath: string): string => {
+	const info = stripOffFrontMatter(md);
+	md = info.doc.trim();
+	const dateString = getNewsDateString(info, mdFilePath);
+	md = md.replace(/^# (.*)/, `# [$1](https://github.com/laurent22/joplin/blob/dev/readme/news/${path.basename(mdFilePath)})\n\n*Published on **${dateString}***\n\n`);
+	md += `\n\n* * *\n\n[<i class="fab fa-discourse"></i> Discuss on the forum](${discussLink})`;
+	return md;
+};
+
 const makeNewsFrontPage = async (sourceFilePaths: string[], targetFilePath: string, templateParams: TemplateParams) => {
 	const maxNewsPerPage = 20;
 
@@ -186,11 +201,7 @@ const makeNewsFrontPage = async (sourceFilePaths: string[], targetFilePath: stri
 
 	for (const mdFilePath of sourceFilePaths) {
 		let md = await readFile(mdFilePath, 'utf8');
-		const info = stripOffFrontMatter(md);
-		md = info.doc.trim();
-		const dateString = moment(info.created).format('D MMM YYYY');
-		md = md.replace(/^# (.*)/, `# [$1](https://github.com/laurent22/joplin/blob/dev/readme/news/${path.basename(mdFilePath)})\n\n*Published on **${dateString}***\n\n`);
-		md += `\n\n* * *\n\n[<i class="fab fa-discourse"></i> Discuss on the forum](${discussLink})`;
+		md = processNewsMarkdown(md, mdFilePath);
 		frontPageMd.push(md);
 		if (frontPageMd.length >= maxNewsPerPage) break;
 	}
@@ -202,7 +213,32 @@ const isNewsFile = (filePath: string): boolean => {
 	return filePath.includes('readme/news/');
 };
 
+const translatePartials = (partials: Partials, languageCode: string, translations: Translations): Partials => {
+	const output: Partials = {};
+	for (const [key, value] of Object.entries(partials)) {
+		output[key] = applyTranslations(value, languageCode, translations);
+	}
+	return output;
+};
+
+const updatePageLanguage = (html: string, lang: string): string => {
+	return html.replace('<html lang="en-gb">', `<html lang="${lang}">`);
+};
+
 async function main() {
+	const supportedLocales = {
+		'en_GB': {
+			htmlTranslations: {},
+			lang: 'en-gb',
+		},
+		'zh_CN': {
+			htmlTranslations: parseTranslations(await parsePoFile(`${websiteAssetDir}/locales/zh_CN.po`)),
+			lang: 'zh-cn',
+		},
+	};
+
+	setLocale('en_GB');
+
 	await remove(`${docDir}`);
 	await copy(websiteAssetDir, `${docDir}`);
 
@@ -211,83 +247,142 @@ async function main() {
 	const assetUrls = await getAssetUrls();
 
 	const readmeMd = makeHomePageMd();
-
-	// await updateDownloadPage(readmeMd);
+	const donateLinksMd = await getDonateLinks();
 
 	// =============================================================
 	// HELP PAGE
 	// =============================================================
 
-	renderPageToHtml(readmeMd, `${docDir}/help/index.html`, { sourceMarkdownFile: 'README.md', partials, sponsors, assetUrls });
+	renderPageToHtml(readmeMd, `${docDir}/help/index.html`, {
+		sourceMarkdownFile: 'README.md',
+		donateLinksMd,
+		partials,
+		sponsors,
+		assetUrls,
+		openGraph: {
+			title: 'Joplin documentation',
+			description: '',
+			url: 'https://joplinapp.org/help/',
+		},
+	});
 
 	// =============================================================
 	// FRONT PAGE
 	// =============================================================
 
-	renderPageToHtml('', `${docDir}/index.html`, {
-		templateHtml: frontTemplateHtml,
-		partials,
-		pressCarouselRegular: {
-			id: 'carouselRegular',
-			items: pressCarouselItems(),
-		},
-		pressCarouselMobile: {
-			id: 'carouselMobile',
-			items: pressCarouselItems(),
-		},
-		sponsors,
-		navbar: {
-			isFrontPage: true,
-		},
-		showToc: false,
-		assetUrls,
-	});
+	for (const [localeName, locale] of Object.entries(supportedLocales)) {
+		setLocale(localeName);
+
+		const pathPrefix = localeName !== 'en_GB' ? `/${countryCodeOnly(localeName).toLowerCase()}` : '';
+
+		let templateHtml = updatePageLanguage(applyTranslations(frontTemplateHtml, localeName, locale.htmlTranslations), locale.lang);
+		if (localeName === 'zh_CN') templateHtml = templateHtml.replace(/\/plans/g, '/cn/plans');
+
+		renderPageToHtml('', `${docDir}${pathPrefix}/index.html`, {
+			templateHtml,
+			partials: translatePartials(partials, localeName, locale.htmlTranslations),
+			pressCarouselRegular: {
+				id: 'carouselRegular',
+				items: pressCarouselItems(),
+			},
+			pressCarouselMobile: {
+				id: 'carouselMobile',
+				items: pressCarouselItems(),
+			},
+			sponsors,
+			navbar: {
+				isFrontPage: true,
+			},
+			showToc: false,
+			assetUrls,
+			openGraph: {
+				title: 'Joplin website',
+				description: 'Joplin, the open source note-taking application',
+				url: 'https://joplinapp.org',
+			},
+		});
+	}
+
+	setLocale('en_GB');
 
 	// =============================================================
 	// PLANS PAGE
 	// =============================================================
 
-	const planPageFaqMd = await readFile(`${rootDir}/readme/faq_joplin_cloud.md`, 'utf8');
-	const planPageFaqHtml = getMarkdownIt().render(planPageFaqMd, {});
+	for (const [localeName, locale] of Object.entries(supportedLocales)) {
+		setLocale(localeName);
 
-	const planPageParams: PlanPageParams = {
-		...defaultTemplateParams(assetUrls),
-		partials,
-		templateHtml: plansTemplateHtml,
-		plans: getPlans(stripeConfig),
-		faqHtml: planPageFaqHtml,
-		stripeConfig,
-	};
+		const planPageFaqMd = await readFile(`${readmeDir}/faq_joplin_cloud.md`, 'utf8');
+		const planPageFaqHtml = getMarkdownIt().render(planPageFaqMd, {});
 
-	const planPageContentHtml = renderMustache('', planPageParams);
+		const planPageParams: PlanPageParams = {
+			...defaultTemplateParams(assetUrls),
+			partials: translatePartials(partials, localeName, locale.htmlTranslations),
+			templateHtml: applyTranslations(plansTemplateHtml, localeName, locale.htmlTranslations),
+			plans: getPlans(stripeConfig),
+			faqHtml: planPageFaqHtml,
+			featureListHtml: getMarkdownIt().render(createFeatureTableMd(), {}),
+			stripeConfig,
+		};
 
-	renderPageToHtml('', `${docDir}/plans/index.html`, {
-		...defaultTemplateParams(assetUrls),
-		pageName: 'plans',
-		partials,
-		showToc: false,
-		showImproveThisDoc: false,
-		contentHtml: planPageContentHtml,
-		title: 'Joplin Cloud Plans',
-	});
+		const planPageContentHtml = renderMustache('', planPageParams);
+
+		const pathPrefix = localeName !== 'en_GB' ? `/${countryCodeOnly(localeName).toLowerCase()}` : '';
+
+		const templateParams = {
+			...defaultTemplateParams(assetUrls),
+			pageName: 'plans',
+			partials,
+			showToc: false,
+			showImproveThisDoc: false,
+			contentHtml: planPageContentHtml,
+			title: 'Joplin Cloud Plans',
+		};
+
+		templateParams.templateHtml = updatePageLanguage(templateParams.templateHtml, locale.lang);
+
+		renderPageToHtml('', `${docDir}${pathPrefix}/plans/index.html`, templateParams);
+	}
+
+	setLocale('en_GB');
 
 	// =============================================================
 	// All other pages are generated dynamically from the
 	// Markdown files under /readme
 	// =============================================================
 
-	const mdFiles = glob.sync(`${rootDir}/readme/**/*.md`).map((f: string) => f.substr(rootDir.length + 1));
+	const mdFiles = glob.sync(`${readmeDir}/**/*.md`).map((f: string) => f.substr(rootDir.length + 1));
 	const sources = [];
-	const donateLinksMd = await getDonateLinks();
+
+	const makeTargetBasename = (input: string): string => {
+		if (isNewsFile(input)) {
+			const filenameNoExt = basename(input, '.md');
+			return `news/${filenameNoExt}/index.html`;
+		} else {
+			// Input is for example "readme/spec/interop_with_frontmatter.md",
+			// and we need to convert it to
+			// "docs/spec/interop_with_frontmatter/index.html" and prefix it
+			// with the website repo full path.
+
+			let s = input;
+			if (s.endsWith('index.md')) {
+				s = s.replace(/index\.md/, 'index.html');
+			} else {
+				s = s.replace(/\.md/, '/index.html');
+			}
+
+			s = s.replace(/readme\//, '');
+
+			return s;
+		}
+	};
 
 	const makeTargetFilePath = (input: string): string => {
-		const filenameNoExt = basename(input, '.md');
+		return `${docDir}/${makeTargetBasename(input)}`;
+	};
 
-		if (isNewsFile(input)) {
-			return `${docDir}/news/${filenameNoExt}/index.html`; // `${input.replace(/\.md/, '').replace(/readme\/news\//, 'docs/news/')}/index.html`;
-		} else {
-			return `${docDir}/${filenameNoExt}/index.html`;
-		}
+	const makeTargetUrl = (input: string) => {
+		return `https://joplinapp.org/${makeTargetBasename(input)}`;
 	};
 
 	const newsFilePaths: string[] = [];
@@ -295,6 +390,7 @@ async function main() {
 	for (const mdFile of mdFiles) {
 		const title = await readmeFileTitle(`${rootDir}/${mdFile}`);
 		const targetFilePath = makeTargetFilePath(mdFile);
+		const openGraph = await extractOpenGraphTags(mdFile, makeTargetUrl(mdFile));
 
 		const isNews = isNewsFile(mdFile);
 		if (isNews) newsFilePaths.push(mdFile);
@@ -303,6 +399,7 @@ async function main() {
 			title: title,
 			donateLinksMd: mdFile === 'readme/donate.md' ? '' : donateLinksMd,
 			showToc: mdFile !== 'readme/download.md' && !isNews,
+			openGraph,
 		}]);
 	}
 
@@ -318,8 +415,8 @@ async function main() {
 			...source[2],
 			templateHtml: mainTemplateHtml,
 			pageName: isNews ? 'news-item' : '',
-			discussOnForumLink: isNews ? discussLink : '',
 			showImproveThisDoc: !isNews,
+			isNews,
 			partials,
 			assetUrls,
 		});
@@ -331,12 +428,24 @@ async function main() {
 
 	await makeNewsFrontPage(newsFilePaths, `${docDir}/news/index.html`, {
 		...defaultTemplateParams(assetUrls),
+		title: 'What\'s new',
 		pageName: 'news',
 		partials,
 		showToc: false,
 		showImproveThisDoc: false,
 		donateLinksMd,
+		openGraph: {
+			title: 'Joplin - what\'s new',
+			description: 'News about the Joplin open source application',
+			url: 'https://joplinapp.org/news/',
+		},
 	});
+
+	// setLocale('zh_CN');
+	// const translations = parseTranslations(await parsePoFile(`${websiteAssetDir}/locales/zh_CN.po`));
+	// await processTranslations(`${docDir}/index.html`, `${docDir}/cn/index.html`, 'zh-cn', translations);
+	// await processTranslations(`${docDir}/plans/index.html`, `${docDir}/cn/plans/index.html`, 'zh-cn', translations);
+	// setLocale('en_GB');
 }
 
 main().catch((error) => {

@@ -27,7 +27,6 @@ export interface NoteEditorProps {
 	editorNoteStatuses: any;
 	syncStarted: boolean;
 	bodyEditor: string;
-	folders: any[];
 	notesParentType: string;
 	selectedNoteTags: any[];
 	lastEditorScrollPercents: any;
@@ -44,6 +43,7 @@ export interface NoteEditorProps {
 	richTextBannerDismissed: boolean;
 	contentMaxWidth: number;
 	isSafeMode: boolean;
+	useCustomPdfViewer: boolean;
 }
 
 export interface NoteBodyEditorProps {
@@ -76,6 +76,8 @@ export interface NoteBodyEditorProps {
 	fontSize: number;
 	contentMaxWidth: number;
 	isSafeMode: boolean;
+	noteId: string;
+	useCustomPdfViewer: boolean;
 }
 
 export interface FormNote {

@@ -7,14 +7,13 @@ import time from '../time';
 import markdownUtils from '../markdownUtils';
 import { NoteEntity } from '../services/database/types';
 import Tag from './Tag';
-
 const { sprintf } = require('sprintf-js');
 import Resource from './Resource';
 import syncDebugLog from '../services/synchronizer/syncDebugLog';
+import { toFileProtocolPath, toForwardSlashes } from '../path-utils';
 const { pregQuote, substrWithEllipsis } = require('../string-utils.js');
 const { _ } = require('../locale');
-const ArrayUtils = require('../ArrayUtils.js');
-const lodash = require('lodash');
+import { pull, unique } from '../ArrayUtils';
 const urlUtils = require('../urlUtils.js');
 const { isImageMimeType } = require('../resourceUtils');
 const { MarkupToHtml } = require('@joplin/renderer');
@@ -58,7 +57,7 @@ export default class Note extends BaseItem {
 	static async serializeAllProps(note: NoteEntity) {
 		const fieldNames = this.fieldNames();
 		fieldNames.push('type_');
-		lodash.pull(fieldNames, 'title', 'body');
+		pull(fieldNames, 'title', 'body');
 		return super.serialize(note, fieldNames);
 	}
 
@@ -67,25 +66,25 @@ export default class Note extends BaseItem {
 
 		const fieldNames = this.fieldNames();
 
-		if (!n.is_conflict) lodash.pull(fieldNames, 'is_conflict');
-		if (!Number(n.latitude)) lodash.pull(fieldNames, 'latitude');
-		if (!Number(n.longitude)) lodash.pull(fieldNames, 'longitude');
-		if (!Number(n.altitude)) lodash.pull(fieldNames, 'altitude');
-		if (!n.author) lodash.pull(fieldNames, 'author');
-		if (!n.source_url) lodash.pull(fieldNames, 'source_url');
+		if (!n.is_conflict) pull(fieldNames, 'is_conflict');
+		if (!Number(n.latitude)) pull(fieldNames, 'latitude');
+		if (!Number(n.longitude)) pull(fieldNames, 'longitude');
+		if (!Number(n.altitude)) pull(fieldNames, 'altitude');
+		if (!n.author) pull(fieldNames, 'author');
+		if (!n.source_url) pull(fieldNames, 'source_url');
 		if (!n.is_todo) {
-			lodash.pull(fieldNames, 'is_todo');
-			lodash.pull(fieldNames, 'todo_due');
-			lodash.pull(fieldNames, 'todo_completed');
+			pull(fieldNames, 'is_todo');
+			pull(fieldNames, 'todo_due');
+			pull(fieldNames, 'todo_completed');
 		}
-		if (!n.application_data) lodash.pull(fieldNames, 'application_data');
+		if (!n.application_data) pull(fieldNames, 'application_data');
 
-		lodash.pull(fieldNames, 'type_');
-		lodash.pull(fieldNames, 'title');
-		lodash.pull(fieldNames, 'body');
-		lodash.pull(fieldNames, 'created_time');
-		lodash.pull(fieldNames, 'updated_time');
-		lodash.pull(fieldNames, 'order');
+		pull(fieldNames, 'type_');
+		pull(fieldNames, 'title');
+		pull(fieldNames, 'body');
+		pull(fieldNames, 'created_time');
+		pull(fieldNames, 'updated_time');
+		pull(fieldNames, 'order');
 
 		return super.serialize(n, fieldNames);
 	}
@@ -117,7 +116,7 @@ export default class Note extends BaseItem {
 
 		const links = urlUtils.extractResourceUrls(body);
 		const itemIds = links.map((l: any) => l.itemId);
-		return ArrayUtils.unique(itemIds);
+		return unique(itemIds);
 	}
 
 	static async linkedItems(body: string) {
@@ -167,7 +166,7 @@ export default class Note extends BaseItem {
 			// change, the preview is updated inside the note. This is not
 			// needed for other resources since they are simple links.
 			const timestampParam = isImage ? `?t=${resource.updated_time}` : '';
-			const resourcePath = options.useAbsolutePaths ? `file://${Resource.fullPath(resource)}${timestampParam}` : Resource.relativePath(resource);
+			const resourcePath = options.useAbsolutePaths ? toFileProtocolPath(Resource.fullPath(resource)) + timestampParam : Resource.relativePath(resource);
 			body = body.replace(new RegExp(`:/${id}`, 'gi'), markdownUtils.escapeLinkUrl(resourcePath));
 		}
 
@@ -181,13 +180,24 @@ export default class Note extends BaseItem {
 			useAbsolutePaths: false,
 		}, options);
 
-		let pathsToTry = [];
+		const resourceDir = toForwardSlashes(Setting.value('resourceDir'));
+
+		const pathsToTry = [];
 		if (options.useAbsolutePaths) {
-			pathsToTry.push(`file://${Setting.value('resourceDir')}`);
-			pathsToTry.push(`file://${shim.pathRelativeToCwd(Setting.value('resourceDir'))}`);
+			pathsToTry.push(`file://${resourceDir}`);
+			pathsToTry.push(`file:///${resourceDir}`);
+			pathsToTry.push(`file://${shim.pathRelativeToCwd(resourceDir)}`);
+			pathsToTry.push(`file:///${shim.pathRelativeToCwd(resourceDir)}`);
 		} else {
 			pathsToTry.push(Resource.baseRelativeDirectoryPath());
 		}
+
+		body = Note.replaceResourceExternalToInternalLinks_(pathsToTry, body);
+		return body;
+	}
+
+	private static replaceResourceExternalToInternalLinks_(pathsToTry: string[], body: string) {
+		// This is a moved to a separate function for the purpose of testing only
 
 		// We support both the escaped and unescaped versions because both
 		// of those paths are valid:
@@ -199,7 +209,7 @@ export default class Note extends BaseItem {
 		const temp = [];
 		for (const p of pathsToTry) {
 			temp.push(p);
-			temp.push(markdownUtils.escapeLinkUrl(p));
+			temp.push(encodeURI(p));
 		}
 
 		pathsToTry = temp;
@@ -224,7 +234,6 @@ export default class Note extends BaseItem {
 			// Handles joplin://af0edffa4a60496bba1b0ba06b8fb39a
 			body = body.replace(/\(joplin:\/\/([a-zA-Z0-9]{32})\)/g, '(:/$1)');
 		}
-
 		// this.logger().debug('replaceResourceExternalToInternalLinks result', body);
 
 		return body;
@@ -242,7 +251,7 @@ export default class Note extends BaseItem {
 		return output;
 	}
 
-	// Note: sort logic must be duplicated in previews();
+	// Note: sort logic must be duplicated in previews().
 	static sortNotes(notes: NoteEntity[], orders: any[], uncompletedTodosOnTop: boolean) {
 		const noteOnTop = (note: NoteEntity) => {
 			return uncompletedTodosOnTop && note.is_todo && !note.todo_completed;
@@ -291,7 +300,7 @@ export default class Note extends BaseItem {
 					if (aProp < bProp) r = +1;
 					if (aProp > bProp) r = -1;
 				}
-				if (order.dir == 'ASC') r = -r;
+				if (order.dir === 'ASC') r = -r;
 				if (r !== 0) return r;
 			}
 
@@ -356,7 +365,7 @@ export default class Note extends BaseItem {
 		// it's confusing to have conflicts but with an empty conflict folder.
 		if (parentId === Folder.conflictFolderId()) options.showCompletedTodos = true;
 
-		if (parentId == Folder.conflictFolderId()) {
+		if (parentId === Folder.conflictFolderId()) {
 			options.conditions.push('is_conflict = 1');
 		} else {
 			options.conditions.push('is_conflict = 0');
@@ -459,9 +468,9 @@ export default class Note extends BaseItem {
 		return this.modelSelectAll('SELECT * FROM notes WHERE is_conflict = 0');
 	}
 
-	public static async updateGeolocation(noteId: string): Promise<void> {
-		if (!Setting.value('trackLocation')) return;
-		if (!Note.updateGeolocationEnabled_) return;
+	public static async updateGeolocation(noteId: string): Promise<NoteEntity | null> {
+		if (!Setting.value('trackLocation')) return null;
+		if (!Note.updateGeolocationEnabled_) return null;
 
 		const startWait = time.unixMs();
 		while (true) {
@@ -470,7 +479,7 @@ export default class Note extends BaseItem {
 			await time.sleep(1);
 			if (startWait + 1000 * 20 < time.unixMs()) {
 				this.logger().warn(`Failed to update geolocation for: timeout: ${noteId}`);
-				return;
+				return null;
 			}
 		}
 
@@ -490,7 +499,7 @@ export default class Note extends BaseItem {
 
 			this.geolocationUpdating_ = false;
 
-			if (!geoData) return;
+			if (!geoData) return null;
 
 			this.logger().info('Got lat/long');
 			this.geolocationCache_ = geoData;
@@ -499,12 +508,14 @@ export default class Note extends BaseItem {
 		this.logger().info(`Updating lat/long of note ${noteId}`);
 
 		const note = await Note.load(noteId);
-		if (!note) return; // Race condition - note has been deleted in the meantime
+		if (!note) return null; // Race condition - note has been deleted in the meantime
 
 		note.longitude = geoData.coords.longitude;
 		note.latitude = geoData.coords.latitude;
 		note.altitude = geoData.coords.altitude;
 		await Note.save(note, { ignoreProvisionalFlag: true });
+
+		return note;
 	}
 
 	static filter(note: NoteEntity) {
@@ -518,7 +529,7 @@ export default class Note extends BaseItem {
 	}
 
 	static async copyToFolder(noteId: string, folderId: string) {
-		if (folderId == this.getClass('Folder').conflictFolderId()) throw new Error(_('Cannot copy note to "%s" notebook', this.getClass('Folder').conflictFolderTitle()));
+		if (folderId === this.getClass('Folder').conflictFolderId()) throw new Error(_('Cannot copy note to "%s" notebook', this.getClass('Folder').conflictFolderTitle()));
 
 		return Note.duplicate(noteId, {
 			changes: {
@@ -530,7 +541,7 @@ export default class Note extends BaseItem {
 	}
 
 	static async moveToFolder(noteId: string, folderId: string) {
-		if (folderId == this.getClass('Folder').conflictFolderId()) throw new Error(_('Cannot move note to "%s" notebook', this.getClass('Folder').conflictFolderTitle()));
+		if (folderId === this.getClass('Folder').conflictFolderId()) throw new Error(_('Cannot move note to "%s" notebook', this.getClass('Folder').conflictFolderTitle()));
 
 		// When moving a note to a different folder, the user timestamp is not updated.
 		// However updated_time is updated so that the note can be synced later on.
@@ -611,6 +622,7 @@ export default class Note extends BaseItem {
 	public static async duplicate(noteId: string, options: any = null) {
 		const changes = options && options.changes;
 		const uniqueTitle = options && options.uniqueTitle;
+		const duplicateResources = options && !!options.duplicateResources;
 
 		const originalNote: NoteEntity = await Note.load(noteId);
 		if (!originalNote) throw new Error(`Unknown note: ${noteId}`);
@@ -632,7 +644,7 @@ export default class Note extends BaseItem {
 			newNote.title = title;
 		}
 
-		newNote.body = await this.duplicateNoteResources(newNote.body);
+		if (duplicateResources) newNote.body = await this.duplicateNoteResources(newNote.body);
 
 		const newNoteSaved = await this.save(newNote);
 		const originalTags = await Tag.tagsByNoteId(noteId);
@@ -805,11 +817,9 @@ export default class Note extends BaseItem {
 
 	// When notes are sorted in "custom order", they are sorted by the "order" field first and,
 	// in those cases, where the order field is the same for some notes, by created time.
-	static customOrderByColumns(type: string = null) {
-		if (!type) type = 'object';
-		if (type === 'object') return [{ by: 'order', dir: 'DESC' }, { by: 'user_created_time', dir: 'DESC' }];
-		if (type === 'string') return 'ORDER BY `order` DESC, user_created_time DESC';
-		throw new Error(`Invalid type: ${type}`);
+	// Further sorting by todo completion status, if enabled, is handled separately.
+	static customOrderByColumns() {
+		return [{ by: 'order', dir: 'DESC' }, { by: 'user_created_time', dir: 'DESC' }];
 	}
 
 	// Update the note "order" field without changing the user timestamps,
@@ -818,6 +828,7 @@ export default class Note extends BaseItem {
 		return Note.save(Object.assign({}, note, {
 			order: order,
 			user_updated_time: note.user_updated_time,
+			updated_time: time.unixMs(),
 		}), { autoTimestamp: false, dispatchUpdateAction: false });
 	}
 
@@ -825,7 +836,7 @@ export default class Note extends BaseItem {
 	// of unecessary updates, so it's the caller's responsability to update
 	// the UI once the call is finished. This is done by listening to the
 	// NOTE_IS_INSERTING_NOTES action in the application middleware.
-	static async insertNotesAt(folderId: string, noteIds: string[], index: number) {
+	static async insertNotesAt(folderId: string, noteIds: string[], index: number, uncompletedTodosOnTop: boolean, showCompletedTodos: boolean) {
 		if (!noteIds.length) return;
 
 		const defer = () => {
@@ -841,13 +852,21 @@ export default class Note extends BaseItem {
 		});
 
 		try {
-			const noteSql = `
-				SELECT id, \`order\`, user_created_time, user_updated_time
-				FROM notes
-				WHERE is_conflict = 0 AND parent_id = ?
-			${this.customOrderByColumns('string')}`;
+			const getSortedNotes = async (folderId: string) => {
+				const noteSql = `
+					SELECT id, \`order\`, user_created_time, user_updated_time,
+						is_todo, todo_completed, title
+					FROM notes
+					WHERE
+						is_conflict = 0
+						${showCompletedTodos ? '' : 'AND todo_completed = 0'}
+					AND parent_id = ?
+				`;
+				const notes_raw: NoteEntity[] = await this.modelSelectAll(noteSql, [folderId]);
+				return await this.sortNotes(notes_raw, this.customOrderByColumns(), uncompletedTodosOnTop);
+			};
 
-			let notes = await this.modelSelectAll(noteSql, [folderId]);
+			let notes = await getSortedNotes(folderId);
 
 			// If the target index is the same as the source note index, exit now
 			for (let i = 0; i < notes.length; i++) {
@@ -867,7 +886,39 @@ export default class Note extends BaseItem {
 				}
 			}
 
-			if (hasSetOrder) notes = await this.modelSelectAll(noteSql, [folderId]);
+			if (hasSetOrder) notes = await getSortedNotes(folderId);
+
+			// If uncompletedTodosOnTop, then we should only consider the existing
+			// order of same-completion-window notes. A completed todo or non-todo
+			// dragged into the uncompleted list should end up at the start of the
+			// completed/non-todo list, and an uncompleted todo dragged into the
+			// completed/non-todo list should end up at the end of the uncompleted
+			// list.
+			// To make this determination we need to know the completion status of the
+			// item we are dropping. We apply several simplifications:
+			//  - We only care about completion status if uncompletedTodosOnTop
+			//  - We only care about completion status / position if the item being
+			//     moved is already in the current list; not if it is dropped from
+			//     another notebook.
+			//  - We only care about the completion status of the first item being
+			//     moved. If a moving selection includes both uncompleted and
+			//     completed/non-todo items, then the completed/non-todo items will
+			//     not get "correct" position (although even defining a "more correct"
+			//     outcome in such a case might be challenging).
+			let relevantExistingNoteCount = notes.length;
+			let firstRelevantNoteIndex = 0;
+			let lastRelevantNoteIndex = notes.length - 1;
+			if (uncompletedTodosOnTop) {
+				const uncompletedTest = (n: NoteEntity) => !(n.todo_completed || !n.is_todo);
+				const targetNoteInNotebook = notes.find(n => n.id === noteIds[0]);
+				if (targetNoteInNotebook) {
+					const targetUncompleted = uncompletedTest(targetNoteInNotebook);
+					const noteFilterCondition = targetUncompleted ? (n: NoteEntity) => uncompletedTest(n) : (n: NoteEntity) => !uncompletedTest(n);
+					relevantExistingNoteCount = notes.filter(noteFilterCondition).length;
+					firstRelevantNoteIndex = notes.findIndex(noteFilterCondition);
+					lastRelevantNoteIndex = notes.map(noteFilterCondition).lastIndexOf(true);
+				}
+			}
 
 			// Find the order value for the first note to be inserted,
 			// and the increment between the order values of each inserted notes.
@@ -875,14 +926,14 @@ export default class Note extends BaseItem {
 			let intervalBetweenNotes = 0;
 			const defaultIntevalBetweeNotes = 60 * 60 * 1000;
 
-			if (!notes.length) { // If there's no notes in the target notebook
+			if (!relevantExistingNoteCount) { // If there's no (relevant) notes in the target notebook
 				newOrder = Date.now();
 				intervalBetweenNotes = defaultIntevalBetweeNotes;
-			} else if (index >= notes.length) { // Insert at the end
-				intervalBetweenNotes = notes[notes.length - 1].order / (noteIds.length + 1);
-				newOrder = notes[notes.length - 1].order - intervalBetweenNotes;
-			} else if (index === 0) { // Insert at the beginning
-				const firstNoteOrder = notes[0].order;
+			} else if (index > lastRelevantNoteIndex) { // Insert at the end (of relevant group)
+				intervalBetweenNotes = notes[lastRelevantNoteIndex].order / (noteIds.length + 1);
+				newOrder = notes[lastRelevantNoteIndex].order - intervalBetweenNotes;
+			} else if (index <= firstRelevantNoteIndex) { // Insert at the beginning (of relevant group)
+				const firstNoteOrder = notes[firstRelevantNoteIndex].order;
 				if (firstNoteOrder >= Date.now()) {
 					intervalBetweenNotes = defaultIntevalBetweeNotes;
 					newOrder = firstNoteOrder + defaultIntevalBetweeNotes;

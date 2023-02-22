@@ -18,12 +18,14 @@ There are also a few forks of existing packages under the "fork-*" name.
 
 ## Required dependencies
 
-- Install node 16+ - https://nodejs.org/en/
-- macOS: Install Cocoapods - `brew install cocoapods`
-- Windows: Install Windows Build Tools - `yarn install -g windows-build-tools --vs2015`
+- Install Node 16+. On Windows, also install the build tools - https://nodejs.org/en/
+  - [Enable Yarn](https://yarnpkg.com/getting-started/install): `corepack enable`
+- macOS: Install Cocoapods - `brew install cocoapods`. Apple Silicon [may require libvips](https://github.com/laurent22/joplin/pull/5966#issuecomment-1007158597) - `brew install vips`.
 - Linux: Install dependencies - `sudo apt install build-essential libnss3 libsecret-1-dev python rsync`
 
 ## Building
+
+Make sure the path to the project directory does not contain spaces or the build may fail.
 
 Before doing anything else, from the root of the project, run:
 
@@ -59,7 +61,7 @@ Normally the **bundler** should start automatically with the application. If it 
 ## Building the clipper
 
 	cd packages/app-clipper/popup
-	yarn run watch # To watch for changes
+	npm run watch # To watch for changes
 
 To test the extension please refer to the relevant pages for each browser: [Firefox](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/Your_first_WebExtension#Trying_it_out) / [Chrome](https://developer.chrome.com/docs/extensions/mv3/getstarted/). Please note that the extension in dev mode will only connect to a dev instance of the desktop app (and vice-versa).
 
@@ -75,7 +77,7 @@ Running `yarn run tsc` would have the same effect, but without watching.
 
 You can specify additional parameters when running the desktop or CLI application. To do so, add `--` to the `yarn start` command, followed by your flags. For example:
 
-	yarn start -- --debug
+	yarn start --debug
 
 ## TypeScript
 

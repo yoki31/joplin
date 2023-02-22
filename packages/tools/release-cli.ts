@@ -10,7 +10,7 @@ async function main() {
 
 	await execCommand2('git pull');
 
-	const newVersion = (await execCommand2('yarn version patch')).trim();
+	const newVersion = (await execCommand2('npm version patch')).trim();
 	console.info(`Building ${newVersion}...`);
 	const newTag = `cli-${newVersion}`;
 
@@ -20,7 +20,7 @@ async function main() {
 
 	process.chdir(`${appDir}/build`);
 
-	await execCommand2('yarn publish');
+	await execCommand2('npm publish');
 
 	await completeReleaseWithChangelog(changelogPath, newVersion, newTag, 'CLI', false);
 }

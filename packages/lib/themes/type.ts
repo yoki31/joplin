@@ -17,7 +17,6 @@ export interface Theme {
 	colorWarn: string;
 	colorWarnUrl: string; // For URL displayed over a warningBackgroundColor
 	colorFaded: string; // For less important text
-	colorBright: string; // For important text
 	dividerColor: string;
 	selectedColor: string;
 	urlColor: string;
@@ -28,7 +27,8 @@ export interface Theme {
 	color2: string;
 	selectedColor2: string;
 	colorError2: string;
-	colorWarn2: string;
+	colorWarn2: string; // On a darker background (eg. sidebar)
+	colorWarn3: string; // On a lighter background (eg. note list)
 
 	// Color scheme "3" is used for the config screens for example/
 	// It's dark text over gray background.
@@ -40,6 +40,9 @@ export interface Theme {
 	// button with blue text.
 	backgroundColor4: string;
 	color4: string;
+
+	backgroundColor5?: string;
+	color5?: string;
 
 	raisedBackgroundColor: string;
 	raisedColor: string;

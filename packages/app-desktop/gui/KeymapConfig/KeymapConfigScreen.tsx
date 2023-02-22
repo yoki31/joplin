@@ -56,13 +56,13 @@ export const KeymapConfigScreen = ({ themeId }: KeymapConfigScreenProps) => {
 			filters: [{ name: 'Joplin Keymaps (keymap-desktop.json)', extensions: ['json'] }],
 		});
 
-		if (filePath) {
+		if (filePath && filePath.length !== 0) {
 			const actualFilePath = filePath[0];
 			try {
 				const keymapFile = await shim.fsDriver().readFile(actualFilePath, 'utf-8');
 				overrideKeymapItems(JSON.parse(keymapFile));
-			} catch (err) {
-				bridge().showErrorMessageBox(_('Error: %s', err.message));
+			} catch (error) {
+				bridge().showErrorMessageBox(_('Error: %s', error.message));
 			}
 		}
 	};
@@ -77,8 +77,8 @@ export const KeymapConfigScreen = ({ themeId }: KeymapConfigScreenProps) => {
 			try {
 				// KeymapService is already synchronized with the in-state keymap
 				await keymapService.saveCustomKeymap(filePath);
-			} catch (err) {
-				bridge().showErrorMessageBox(err.message);
+			} catch (error) {
+				bridge().showerrororMessageBox(error.message);
 			}
 		}
 	};

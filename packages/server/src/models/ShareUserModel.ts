@@ -50,7 +50,7 @@ export default class ShareUserModel extends BaseModel<ShareUser> {
 			.select(this.defaultFields)
 			.whereIn('share_id', shareIds);
 
-		if (status !== null) query.where('status', status);
+		if (status !== null) void query.where('status', status);
 
 		const rows: ShareUser[] = await query;
 
@@ -143,6 +143,16 @@ export default class ShareUserModel extends BaseModel<ShareUser> {
 		await this.withTransaction(async () => {
 			await this.delete(shareUsers.map(s => s.id));
 		}, 'ShareUserModel::deleteByShare');
+	}
+
+	public async deleteByUserId(userId: Uuid) {
+		const shareUsers = await this.byUserId(userId);
+
+		await this.withTransaction(async () => {
+			for (const shareUser of shareUsers) {
+				await this.delete(shareUser.id);
+			}
+		}, 'UserShareModel::deleteByUserId');
 	}
 
 	public async delete(id: string | string[], _options: DeleteOptions = {}): Promise<void> {

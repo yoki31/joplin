@@ -5,12 +5,11 @@ import { localSyncInfo, masterKeyById, masterKeyEnabled, setActiveMasterKeyId, s
 import Setting from '../../models/Setting';
 import { generateKeyPair, ppkPasswordIsValid } from './ppk';
 
-describe('e2ee/utils', function() {
+describe('e2ee/utils', () => {
 
-	beforeEach(async (done) => {
+	beforeEach(async () => {
 		await setupDatabaseAndSynchronizer(1);
 		await switchClient(1);
-		done();
 	});
 
 	afterAll(async () => {

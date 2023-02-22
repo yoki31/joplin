@@ -14,13 +14,12 @@ async function recreateExportDir() {
 	await fs.mkdirp(dir);
 }
 
-describe('interop/InteropService_Exporter_Html', function() {
+describe('interop/InteropService_Exporter_Html', () => {
 
-	beforeEach(async (done) => {
+	beforeEach(async () => {
 		await setupDatabaseAndSynchronizer(1);
 		await switchClient(1);
 		await recreateExportDir();
-		done();
 	});
 
 	test('should export HTML file', (async () => {

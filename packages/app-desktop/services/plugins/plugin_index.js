@@ -1,6 +1,6 @@
 (function(globalObject) {
 	// TODO: Not sure if that will work once packaged in Electron
-	const sandboxProxy = require('../../build/lib/@joplin/lib/services/plugins/sandboxProxy.js');
+	const sandboxProxy = require('../../vendor/lib/@joplin/lib/services/plugins/sandboxProxy.js');
 	const ipcRenderer = require('electron').ipcRenderer;
 
 	const ipcRendererSend = (message, args) => {
@@ -53,7 +53,7 @@
 			// The sqlite3 is actually part of the lib package so we need to do
 			// something convoluted to get it working.
 			if (modulePath === 'sqlite3') {
-				return require('../../node_modules/@joplin/lib/node_modules/sqlite3/sqlite3.js');
+				return require('../../node_modules/@joplin/lib/node_modules/sqlite3/lib/sqlite3.js');
 			}
 
 			if (['fs-extra'].includes(modulePath)) return require(modulePath);

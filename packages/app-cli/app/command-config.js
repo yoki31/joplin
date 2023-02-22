@@ -1,4 +1,4 @@
-const { BaseCommand } = require('./base-command.js');
+const BaseCommand = require('./base-command').default;
 const { _, setLocale } = require('@joplin/lib/locale');
 const { app } = require('./app.js');
 const fs = require('fs-extra');
@@ -39,9 +39,9 @@ class Command extends BaseCommand {
 				let settingsObj;
 				try {
 					settingsObj = JSON.parse(json);
-				} catch (err) {
+				} catch (error) {
 					isSettled = true;
-					return reject(new Error(`Invalid JSON passed to config --import: \n${err.message}.`));
+					return reject(new Error(`Invalid JSON passed to config --import: \n${error.message}.`));
 				}
 				if (settingsObj) {
 					Object.entries(settingsObj)
@@ -122,7 +122,7 @@ class Command extends BaseCommand {
 		}
 
 
-		if (args.name == 'locale') {
+		if (args.name === 'locale') {
 			setLocale(Setting.value('locale'));
 		}
 

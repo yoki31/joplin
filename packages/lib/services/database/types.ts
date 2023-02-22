@@ -15,9 +15,27 @@ export interface BaseItemEntity {
   created_time?: number;
 }
 
+export enum FolderIconType {
+  Emoji = 1,
+  DataUrl = 2,
+  FontAwesome = 3,
+}
+
 export interface FolderIcon {
+  type: FolderIconType;
 	emoji: string;
 	name: string;
+  dataUrl: string;
+}
+
+export const defaultFolderIcon = () => {
+  const icon:FolderIcon = {
+    type: FolderIconType.Emoji,
+    emoji: '',
+    name: '',
+    dataUrl: '',
+  };
+  return icon;
 }
 
 

@@ -98,21 +98,21 @@ class SyncTargetAmazonS3 extends BaseSyncTarget {
 	// We could implement that here, but the above workaround saves some code.
 
 	static async checkConfig(options) {
-		const fileApi = await SyncTargetAmazonS3.newFileApi_(SyncTargetAmazonS3.id(), options);
-		fileApi.requestRepeatCount_ = 0;
-
 		const output = {
 			ok: false,
 			errorMessage: '',
 		};
 		try {
+			const fileApi = await SyncTargetAmazonS3.newFileApi_(SyncTargetAmazonS3.id(), options);
+			fileApi.requestRepeatCount_ = 0;
+
 			const headBucketReq = new Promise((resolve, reject) => {
 				fileApi.driver().api().send(
 
 					new HeadBucketCommand({
 						Bucket: options.path(),
-					}),(err, response) => {
-						if (err) reject(err);
+					}), (error, response) => {
+						if (error) reject(error);
 						else resolve(response);
 					});
 			});

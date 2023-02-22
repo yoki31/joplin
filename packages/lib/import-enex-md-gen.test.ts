@@ -13,12 +13,11 @@ import Resource from './models/Resource';
 
 const enexSampleBaseDir = `${supportDir}/../enex_to_md`;
 
-describe('import-enex-md-gen', function() {
+describe('import-enex-md-gen', () => {
 
-	beforeEach(async (done) => {
+	beforeEach(async () => {
 		await setupDatabaseAndSynchronizer(1);
 		await switchClient(1);
-		done();
 	});
 
 	it('should convert ENEX content to Markdown', async () => {
@@ -55,6 +54,7 @@ describe('import-enex-md-gen', function() {
 				result.push('--------------------------------------------');
 				result.push('');
 
+				// eslint-disable-next-line no-console
 				console.info(result.join('\n'));
 
 				expect(false).toBe(true);

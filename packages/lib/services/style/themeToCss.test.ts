@@ -15,7 +15,6 @@ const input: Theme = {
 	colorWarn: 'rgb(228,86,0)',
 	colorWarnUrl: '#155BDA',
 	colorFaded: '#7C8B9E', // For less important text
-	colorBright: '#000000', // For important text
 	dividerColor: '#dddddd',
 	selectedColor: '#e5e5e5',
 	urlColor: '#155BDA',
@@ -27,6 +26,7 @@ const input: Theme = {
 	selectedColor2: '#131313',
 	colorError2: '#ff6c6c',
 	colorWarn2: '#ffcb81',
+	colorWarn3: '#ff7626',
 
 	// Color scheme "3" is used for the config screens for example/
 	// It's dark text over gray background.
@@ -69,7 +69,6 @@ const expected = `
 	--joplin-color-warn: rgb(228,86,0);
 	--joplin-color-warn-url: #155BDA;
 	--joplin-color-faded: #7C8B9E;
-	--joplin-color-bright: #000000;
 	--joplin-divider-color: #dddddd;
 	--joplin-selected-color: #e5e5e5;
 	--joplin-url-color: #155BDA;
@@ -78,6 +77,7 @@ const expected = `
 	--joplin-selected-color2: #131313;
 	--joplin-color-error2: #ff6c6c;
 	--joplin-color-warn2: #ffcb81;
+	--joplin-color-warn3: #ff7626;
 	--joplin-background-color3: #F4F5F6;
 	--joplin-background-color-hover3: #CBDAF1;
 	--joplin-color3: #738598;
@@ -97,7 +97,7 @@ const expected = `
 	--joplin-code-theme-css: atom-one-light.css;
 }`;
 
-describe('themeToCss', function() {
+describe('themeToCss', () => {
 
 	it('should a theme to a CSS string', async () => {
 		const actual = themeToCss(input);

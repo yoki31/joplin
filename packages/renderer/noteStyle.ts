@@ -49,9 +49,6 @@ export default function(theme: any, options: Options = null) {
 			padding-bottom: ${formatCssSize(theme.bodyPaddingBottom)};
 			padding-top: ${formatCssSize(theme.bodyPaddingTop)};
 		}
-		strong {
-			color: ${theme.colorBright};
-		}
 		kbd {
 			border: 1px solid ${theme.codeBorderColor};
 			box-shadow: inset 0 -1px 0 ${theme.codeBorderColor};
@@ -129,6 +126,7 @@ export default function(theme: any, options: Options = null) {
 		}
 		h3 {
 			font-size: 1.1em;
+			font-weight: bold;
 		}
 		h4, h5, h6 {
 			font-size: 1em;
@@ -377,7 +375,12 @@ export default function(theme: any, options: Options = null) {
 		}
 
 		.media-player.media-pdf {
-			min-height: 100vh;
+			min-height: 35rem;
+			width: 100%;
+			max-width: 1000px;
+			margin: 0;
+			border: 0;
+			display: block;
 		}
 
 		/* Clear the CODE style if the element is within a joplin-editable block */

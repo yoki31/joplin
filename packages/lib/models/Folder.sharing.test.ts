@@ -9,12 +9,11 @@ import ResourceService from '../services/ResourceService';
 
 const testImagePath = `${supportDir}/photo.jpg`;
 
-describe('models/Folder.sharing', function() {
+describe('models/Folder.sharing', () => {
 
-	beforeEach(async (done) => {
+	beforeEach(async () => {
 		await setupDatabaseAndSynchronizer(1);
 		await switchClient(1);
-		done();
 	});
 
 	it('should apply the share ID to all children', (async () => {

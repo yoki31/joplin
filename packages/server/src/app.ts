@@ -24,6 +24,7 @@ import { RouteResponseFormat, routeResponseFormat } from './utils/routeUtils';
 import { parseEnv } from './env';
 import storageConnectionCheck from './utils/storageConnectionCheck';
 import { setLocale } from '@joplin/lib/locale';
+import checkAdminHandler from './middleware/checkAdminHandler';
 
 interface Argv {
 	env?: Env;
@@ -69,7 +70,7 @@ function markPasswords(o: Record<string, any>): Record<string, any> {
 	const output: Record<string, any> = {};
 
 	for (const k of Object.keys(o)) {
-		if (k.toLowerCase().includes('password') || k.toLowerCase().includes('secret')) {
+		if (k.toLowerCase().includes('password') || k.toLowerCase().includes('secret') || k.toLowerCase().includes('connectionstring')) {
 			output[k] = '********';
 		} else {
 			output[k] = o[k];
@@ -160,7 +161,7 @@ async function main() {
 					});
 				} catch (anotherError) {
 					ctx.response.set('Content-Type', 'application/json');
-					ctx.body = JSON.stringify({ error: error.message });
+					ctx.body = JSON.stringify({ error: `${error.message} (Check the server log for more information)` });
 				}
 			} else {
 				ctx.response.set('Content-Type', 'application/json');
@@ -196,6 +197,7 @@ async function main() {
 
 	app.use(apiVersionHandler);
 	app.use(ownerHandler);
+	app.use(checkAdminHandler);
 	app.use(notificationHandler);
 	app.use(clickJackingHandler);
 	app.use(routeHandler);
@@ -283,17 +285,17 @@ async function main() {
 		appLogger().info('Connection check:', connectionCheckLogInfo);
 		const ctx = app.context as AppContext;
 
-		await setupAppContext(ctx, env, connectionCheck.connection, appLogger);
-
-		await initializeJoplinUtils(config(), ctx.joplinBase.models, ctx.joplinBase.services.mustache);
-
 		if (config().database.autoMigration) {
 			appLogger().info('Auto-migrating database...');
-			await migrateLatest(ctx.joplinBase.db);
-			appLogger().info('Latest migration:', await latestMigration(ctx.joplinBase.db));
+			await migrateLatest(connectionCheck.connection);
+			appLogger().info('Latest migration:', await latestMigration(connectionCheck.connection));
 		} else {
 			appLogger().info('Skipped database auto-migration.');
 		}
+
+		await setupAppContext(ctx, env, connectionCheck.connection, appLogger);
+
+		await initializeJoplinUtils(config(), ctx.joplinBase.models, ctx.joplinBase.services.mustache);
 
 		appLogger().info('Performing main storage check...');
 		appLogger().info(await storageConnectionCheck(config().storageDriver, ctx.joplinBase.db, ctx.joplinBase.models));

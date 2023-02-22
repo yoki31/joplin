@@ -26,7 +26,7 @@ const shim = require('@joplin/lib/shim').default;
 const { shimInit } = require('@joplin/lib/shim-init-node.js');
 const bridge = require('@electron/remote').require('./bridge').default;
 const EncryptionService = require('@joplin/lib/services/e2ee/EncryptionService').default;
-const { FileApiDriverLocal } = require('@joplin/lib/file-api-driver-local.js');
+const { FileApiDriverLocal } = require('@joplin/lib/file-api-driver-local');
 const React = require('react');
 const nodeSqlite = require('sqlite3');
 
@@ -56,6 +56,7 @@ if (bridge().env() === 'dev') {
 	window.console = newConsole;
 }
 
+// eslint-disable-next-line no-console
 console.info(`Environment: ${bridge().env()}`);
 
 const fsDriver = new FsDriverNode();
@@ -77,7 +78,9 @@ BaseItem.loadClass('Revision', Revision);
 Setting.setConstant('appId', `net.cozic.joplin${bridge().env() === 'dev' ? 'dev' : ''}-desktop`);
 Setting.setConstant('appType', 'desktop');
 
+// eslint-disable-next-line no-console
 console.info(`appId: ${Setting.value('appId')}`);
+// eslint-disable-next-line no-console
 console.info(`appType: ${Setting.value('appType')}`);
 
 let keytar;
@@ -112,7 +115,15 @@ document.addEventListener('auxclick', event => event.preventDefault());
 // Each link (rendered as a button or list item) has its own custom click event
 // so disable the default. In particular this will disable Ctrl+Clicking a link
 // which would open a new browser window.
-document.addEventListener('click', (event) => event.preventDefault());
+document.addEventListener('click', (event) => {
+	// We don't apply this to labels and inputs because it would break
+	// checkboxes. Such a global event handler is probably not a good idea
+	// anyway but keeping it for now, as it doesn't seem to break anything else.
+	// https://github.com/facebook/react/issues/13477#issuecomment-489274045
+	if (['LABEL', 'INPUT'].includes(event.target.nodeName)) return;
+
+	event.preventDefault();
+});
 
 app().start(bridge().processArgv()).then((result) => {
 	if (!result || !result.action) {
@@ -123,7 +134,7 @@ app().start(bridge().processArgv()).then((result) => {
 }).catch((error) => {
 	const env = bridge().env();
 
-	if (error.code == 'flagError') {
+	if (error.code === 'flagError') {
 		bridge().showErrorMessageBox(error.message);
 	} else {
 		// If something goes wrong at this stage we don't have a console or a log file

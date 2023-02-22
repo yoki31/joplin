@@ -87,6 +87,34 @@
 		{
 			"name": "marcdw1289",
 			"id": "42319182"
+		},
+		{
+			"name": "kianenigma",
+			"id": "5588131"
+		},
+		{
+			"name": "taskcruncher",
+			"id": "765564"
+		},
+		{
+			"name": "fourstepper",
+			"id": "49439044"
+		},
+		{
+			"name": "Polymathic-Company",
+			"id": "77214738"
+		},
+		{
+			"name": "sif",
+			"id": "327998"
+		},
+		{
+			"name": "skyrunner15",
+			"id": "54626606"
+		},
+		{
+			"name": "jknowles",
+			"id": "1310474"
 		}
 	],
 	"orgs": [
@@ -105,6 +133,16 @@
 			"urlWebsite": "https://www.hosting.de/nextcloud/?mtm_campaign=managed-nextcloud&mtm_kwd=joplinapp&mtm_source=joplinapp-webseite&mtm_medium=banner",
 			"title": "Hosting.de",
 			"imageName": "HostingDe.png"
+		},
+		{
+			"url": "https://residence-greece.com/",
+			"title": "Greece Golden Visa",
+			"imageName": "ResidenceGreece.jpg"
+		},
+		{
+			"url": "https://grundstueckspreise.info/",
+			"title": "SP Software GmbH",
+			"imageName": "Grundstueckspreise.png"
 		}
 	],
 	"orgsOld": []

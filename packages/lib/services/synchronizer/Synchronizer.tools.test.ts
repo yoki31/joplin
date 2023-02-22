@@ -4,13 +4,12 @@ import Folder from '../../models/Folder';
 import Note from '../../models/Note';
 import { clearLocalDataForRedownload, clearLocalSyncStateForReupload } from '../../services/synchronizer/tools';
 
-describe('Synchronizer.tools', function() {
+describe('Synchronizer.tools', () => {
 
-	beforeEach(async (done) => {
+	beforeEach(async () => {
 		await setupDatabaseAndSynchronizer(1);
 		await setupDatabaseAndSynchronizer(2);
 		await switchClient(1);
-		done();
 	});
 
 	afterAll(async () => {
