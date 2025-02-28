@@ -3,7 +3,8 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import useAsyncEffect, { AsyncEffectEvent } from '@joplin/lib/hooks/useAsyncEffect';
 import { loadScript } from '../utils/loadScript';
 import Button from '../Button/Button';
-import { FolderIcon } from '@joplin/lib/services/database/types';
+import { FolderIcon, FolderIconType } from '@joplin/lib/services/database/types';
+import bridge from '../../services/bridge';
 
 export interface ChangeEvent {
 	value: FolderIcon;
@@ -14,12 +15,13 @@ type ChangeHandler = (event: ChangeEvent)=> void;
 interface Props {
 	onChange: ChangeHandler;
 	icon: FolderIcon | null;
+	title: string;
 }
 
 export const IconSelector = (props: Props) => {
 	const [emojiButtonClassReady, setEmojiButtonClassReady] = useState<boolean>(false);
 	const [picker, setPicker] = useState<EmojiButton>();
-	const buttonRef = useRef(null);
+	const buttonRef = useRef<HTMLButtonElement>(null);
 
 	useAsyncEffect(async (event: AsyncEffectEvent) => {
 		const loadScripts = async () => {
@@ -29,21 +31,21 @@ export const IconSelector = (props: Props) => {
 
 			await loadScript({
 				id: 'emoji-button-lib',
-				src: 'build/lib/@joeattardi/emoji-button/dist/index.js',
+				src: `${bridge().vendorDir()}/lib/@joeattardi/emoji-button/dist/index.js`,
 				attrs: {
 					type: 'module',
 				},
-			});
+			}, document);
 
 			if (event.cancelled) return;
 
 			await loadScript({
 				id: 'emoji-button-lib-loader',
-				src: 'gui/EditFolderDialog/loadEmojiLib.js',
+				src: `${bridge().vendorDir()}/loadEmojiLib.js`,
 				attrs: {
 					type: 'module',
 				},
-			});
+			}, document);
 
 			if (event.cancelled) return;
 
@@ -56,12 +58,14 @@ export const IconSelector = (props: Props) => {
 	useEffect(() => {
 		if (!emojiButtonClassReady) return () => {};
 
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Old code before rule was applied
 		const p: EmojiButton = new (window as any).EmojiButton({
 			zIndex: 10000,
+			rootElement: buttonRef.current?.parentElement,
 		});
 
 		const onEmoji = (selection: FolderIcon) => {
-			props.onChange({ value: selection });
+			props.onChange({ value: { ...selection, type: FolderIconType.Emoji } });
 		};
 
 		p.on('emoji', onEmoji);
@@ -70,6 +74,7 @@ export const IconSelector = (props: Props) => {
 
 		return () => {
 			p.off('emoji', onEmoji);
+			p.destroyPicker();
 		};
 	}, [emojiButtonClassReady, props.onChange]);
 
@@ -77,16 +82,25 @@ export const IconSelector = (props: Props) => {
 		picker.togglePicker(buttonRef.current);
 	}, [picker]);
 
-	const buttonText = props.icon ? props.icon.emoji : '...';
+	// const buttonText = props.icon ? props.icon.emoji : '...';
 
 	return (
 		<Button
 			disabled={!picker}
 			ref={buttonRef}
 			onClick={onClick}
-			title={buttonText}
-			isSquare={true}
-			fontSize={20}
+			title={props.title}
 		/>
 	);
+
+	// return (
+	// 	<Button
+	// 		disabled={!picker}
+	// 		ref={buttonRef}
+	// 		onClick={onClick}
+	// 		title={buttonText}
+	// 		isSquare={true}
+	// 		fontSize={20}
+	// 	/>
+	// );
 };
